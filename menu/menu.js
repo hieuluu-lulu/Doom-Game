@@ -6,7 +6,9 @@
 // ============================================================================
 function SXMENU_toTitle() {
   var p = new URLSearchParams(location.search)
-  ;['autostart', 'shot', 'cam', 'bench', 'dt'].forEach(function (k) { p.delete(k) })
+  // (and the room: a link that still says join/host would walk straight back in)
+  ;['autostart', 'shot', 'cam', 'bench', 'dt', 'join', 'host', 'room', 'team', 'mode', 'bots', 'seed'].forEach(function (k) { p.delete(k) })
+  try { if (typeof SXN_leave === 'function' && typeof SXN !== 'undefined' && SXN.active) SXN_leave() } catch (e) { }
   if (typeof SX_MAP !== 'undefined') p.set('map', SX_MAP)
   var veil = document.createElement('div')
   veil.className = 'sxmenu-veil'

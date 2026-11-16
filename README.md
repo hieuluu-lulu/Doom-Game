@@ -86,11 +86,17 @@ Số người một phòng tuỳ map và do host chọn. Ở màn hình chính b
 - **Hồi sinh = bộ đồ ban đầu:** mỗi lần hồi sinh, súng, đạn (đầy băng, đạn dự trữ theo cỡ như lúc bắt đầu), phụ kiện, mũ, áo giáp, balo, lựu đạn, túi máu đều về như lúc vào trận (`resetKit` trong `arsenal/`). Đồ nhặt trên map không bị đặt lại.
 - **Bất tử khi hồi sinh:** 2,5 giây không mất máu lúc bắt đầu trận và sau mỗi lần hồi sinh (`SXN_TUNE.protect`, mọi map). Nổ súng là hết bảo vệ ngay, để không lợi dụng. Màn hình hiện "SPAWN PROTECTION 3"; người khác thấy dấu ⛨ trước tên, và bắn vào lúc đó không tính.
 - **Thắng theo ván (đối kháng: Blue vs Red, hoặc Free-for-all có từ 2 người):** không tính theo kill nữa (kill vẫn được đếm để xem).
-  - **Blue vs Red — mỗi ván mỗi người một mạng.** Chết thì không tự hồi sinh; màn hình hiện "You are out — back next round" kèm số người còn sống mỗi bên. Đội nào không còn ai sống thì đội kia ăn 1 ván. Chết vì robot, rơi… cũng tính. Hai đội cùng hết người một lúc = hoà, không ai được điểm.
-  - **Free-for-all — mỗi ván 3 phút, có hồi sinh** (chết thì 5 giây sau hồi sinh ở chỗ xa người khác). Hết giờ, ai hạ được nhiều người chơi nhất **trong ván đó** thì ăn ván (hạ robot không tính). Bằng nhau ở vị trí cao nhất, hoặc chưa ai hạ được ai, thì hoà. HUD hiện đồng hồ của ván, số người bạn đã hạ trong ván và số cao nhất ("ROUND 2 · 1:47 · KILLS 3 / TOP 4"). Độ dài ván: `SXN_TUNE.rounds.ffaTime`.
+  - **Blue vs Red — mỗi ván mỗi người một mạng.** Chết thì không tự hồi sinh; màn hình hiện "You are out — back next round" kèm số người còn sống mỗi bên.
+  - **Xem đồng đội khi đã chết (spectate):** camera bám theo một đồng đội còn sống, đứng sau vai (cách khoảng 2,4 m, tự kéo lại gần khi có tường chắn, không xuyên tường). Chuột trái hoặc Space: đồng đội tiếp theo; chuột phải: người trước. Súng trên tay bạn được cất đi; thanh nhỏ dưới màn hình ghi "Spectating <tên>" và số người còn sống mỗi bên. Ván mới bắt đầu thì về góc nhìn của mình. Chỉnh khoảng cách/độ cao ở `SXN_TUNE.spectate`. Đội nào không còn ai sống thì đội kia ăn 1 ván. Chết vì robot, rơi… cũng tính. Hai đội cùng hết người một lúc = hoà, không ai được điểm. **Hết giờ** mà chưa đội nào bị xoá sổ: đội còn nhiều người sống hơn ăn ván ("BLUE WINS ROUND 3 on time (BLUE 2 v 1 RED alive)"), bằng nhau thì hoà.
+  - **Free-for-all — mỗi ván theo số phút host đặt (mặc định 3), có hồi sinh** (chết thì 5 giây sau hồi sinh ở chỗ xa người khác). Hết giờ, ai hạ được nhiều người chơi nhất **trong ván đó** thì ăn ván (hạ robot không tính). Bằng nhau ở vị trí cao nhất, hoặc chưa ai hạ được ai, thì hoà. HUD hiện đồng hồ của ván, số người bạn đã hạ trong ván và số cao nhất ("ROUND 2 · 1:47 · KILLS 3 / TOP 4").
   - **Hết ván:** banner ("BLUE WINS ROUND 3 — BLUE 3 : 2 RED"), nghỉ 4 giây, rồi mọi người hồi sinh ở căn cứ với bộ đồ ban đầu, đồ nhặt trên map đặt lại, bất tử 2,5 giây ("ROUND 4 — …").
-  - **Thắng trận:** đạt số ván host đặt **và hơn bên kia ít nhất 2 ván**. Ví dụ đặt 5: 5:4 thì đánh tiếp, 6:4 mới thắng. Có banner "… WINS THE MATCH — BLUE 6 : 4 RED", 8 giây sau trận mới bắt đầu lại từ 0:0.
+  - **Thắng trận:** đạt số ván host đặt **và hơn bên kia ít nhất 2 ván**. Ví dụ đặt 5: 5:4 thì đánh tiếp, 6:4 mới thắng.
+  - **Màn hình kết quả** (mọi người, khi thắng trận): "VICTORY"/"DEFEAT" theo phe của bạn, tiêu đề "BLUE TEAM WINS" (Free-for-all: "YOU WIN THE MATCH" / "<tên> WINS THE MATCH"), tỉ số và số ván đã đánh.
+    - **Bảng thành tích:** mỗi người một dòng — hạ người chơi (Kills), chết (Deaths), K/D, hạ robot (Robots); Free-for-all thêm cột số ván thắng. Đội thắng xếp trước, trong đội xếp theo kill; dòng của bạn được tô sáng; người nhiều kill nhất (ít chết hơn nếu bằng) có ★ MVP. Số liệu tính riêng từng trận.
+    - **Nút:** "Main menu" (mọi người) rời phòng và về màn hình chính — link không còn mã phòng nên không tự vào lại; "Next match" (chỉ host) bắt đầu trận mới ngay. Không ai bấm thì 20 giây sau trận mới tự bắt đầu (`SXN_TUNE.rounds.matchPause`), tỉ số và bảng thành tích về 0.
+    - Trong lúc xem bảng: chuột được nhả ra để bấm nút (game không tự tạm dừng), không di chuyển được và không ai mất máu.
   - **Ô "Rounds to win" trong sảnh chờ:** host nhập số ván (1–15, mặc định 5, máy host nhớ cho lần sau), khách chỉ xem. Chỉ đổi được khi chưa vào trận.
+  - **Ô "Minutes per round":** host nhập số phút tối đa của một ván (0,5–15, bước 0,5, mặc định 3, máy host nhớ cho lần sau), khách chỉ xem. Free-for-all: ván kéo dài đúng chừng đó. Blue vs Red: thời gian tối đa (xoá sổ đội kia trước thì hết ván sớm). HUD của cả hai chế độ hiện đồng hồ đếm ngược của ván ("ROUND 2 · 1:47 · …").
   - **HUD dưới la bàn:** số ván thắng mỗi bên và "ROUND n · FIRST TO N · BY 2" (Free-for-all: "YOU x · <người dẫn đầu> y" cùng đồng hồ và kill của ván).
   - Host quyết định mọi thứ (ai còn sống, kill trong ván, đồng hồ, ai ăn ván) và gửi cho cả phòng; ván Blue vs Red không kết thúc trong 3 giây đầu (mọi người còn đang xuất phát). Chỉnh ở `SXN_TUNE.rounds`.
   - Nếu bên kia rời phòng hết (không còn đối kháng) thì người đang chết hồi sinh sau 5 giây như co-op.
@@ -582,7 +588,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 
 ## menu
 
-Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình hoàn thành nhiệm vụ. Bấm vào thì game tải lại về màn tiêu đề, vẫn giữ map đang chơi.
+Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình hoàn thành nhiệm vụ. Bấm vào thì game tải lại về màn tiêu đề, vẫn giữ map đang chơi. Đang ở trong phòng multiplayer thì nút này cũng rời phòng và bỏ mã phòng khỏi link (trước đây link còn `?join=`/`?host=` nên tải lại là tự vào lại phòng).
 
 ## Va chạm, âm thanh, hiệu năng
 
@@ -646,7 +652,7 @@ Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình
   | Phụ kiện | Hiệu ứng | Lắp được cho |
   |---|---|---|
   | Red dot, Holo | Thước ngắm gọn hơn | M7 (shotgun KR-12 không gắn ống ngắm nào) |
-  | Ống 4x | Zoom 4x | PAC-9 (gắn sau red dot sẵn có), SR-3 |
+  | Ống 4x | Zoom 4x | PAC-9 (ống ACOG thay chỗ red dot), SR-3 |
   | Ống 8x | Zoom 8x | SR-3 |
   | Giảm thanh | Gần như không lửa đầu nòng, tiếng nhỏ, địch chỉ nghe thấy trong khoảng 9 m | PAC-9, M7, SR-3 |
   | Bù giật | Giật −28%, lệch ngang −40% | PAC-9, SR-3 |
@@ -665,6 +671,11 @@ Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình
   - Nhặt được súng mới (shotgun, SR-3) thì súng tự lấy phụ kiện hợp từ túi lắp vào các khe trống.
 - **Đổi scope (B):** đổi qua lại giữa các ống ngắm của súng đang cầm, gồm ống đang lắp và ống trong túi.
   - PAC-9: 4x ↔ red dot gắn sẵn.
+- **Ống 4x của PAC-9 = ống ngắm kiểu ACOG** (`arsenal/assets/scope4x.glb`, model "4x Scope" của Monstr 3d, CC-BY-4.0, 0,12 MB; chỉnh ở `SXA_TUNE.scope4x`):
+  - Gắn lên ray đúng chỗ red dot; red dot gắn sẵn của PAC-9 được tháo ra (cắt khỏi thân súng) khi ống 4x đang lắp, bấm B về RDS thì red dot hiện lại.
+  - Kích thước, trục ngắm và chân đế tính từ hình khối của model (trục đi qua 2 mặt kính, chân đế là điểm thấp nhất); kính của model đổi thành kính phủ tối.
+  - Ngắm hẳn thì vào khung ngắm riêng kiểu ACOG: ô tròn rộng có vành thị kính tối, chữ V đỏ ở giữa, cột vạch bù đạn bên dưới, 2 vạch ngang ngắn; cảnh phóng 4x. Không dùng khung ngắm đen của súng tỉa.
+  - Súng trường không lắp được ống 8x (8x chỉ cho SR-3): nhặt 8x khi đang cầm PAC-9 thì vào balo.
   - SR-3: 8x ↔ 4x (súng tỉa luôn giữ một ống ngắm).
   - M7: red dot ↔ holo ↔ ngắm sắt. KR-12 (shotgun) không có ống ngắm, bấm B chỉ báo không có ống khác.
   - Dòng phụ kiện trên HUD có gợi ý `B ⇄ 4X` cho biết bấm B sẽ chuyển sang ống nào.

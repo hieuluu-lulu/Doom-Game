@@ -43,13 +43,21 @@ var SXN_TUNE = {
   rate: 15, worldRate: 10, interp: 0.12, respawn: 5, pvpScale: 0.6, orphanT: 1.5,
   credit: 4000,
   // versus = rounds. Blue vs Red: elimination, one life per round, a team with
-  // nobody left standing loses it. Free-for-all: timed rounds (ffaTime s) with
-  // respawns, the most player kills in the round takes it (a tie = a draw).
+  // nobody left standing loses it; when the time is up first, the team with
+  // more players standing takes it (equal = a draw). Free-for-all: respawns,
+  // and when the time is up the most player kills in the round takes it (a
+  // tie = a draw). The time: SXN.roundMins, the host sets it in the lobby
+  // (mins.min…max in steps of mins.step, default mins.def).
   // The match: SXN.winRounds round wins (the host sets it in the lobby,
   // rounds.min…max, default rounds.def) with a lead of rounds.by.
   // grace: no round can end in its first seconds (everyone still spawning);
-  // pause / matchPause: the banner time before the next round / match
-  rounds: { def: 5, min: 1, max: 15, by: 2, grace: 3, pause: 4, matchPause: 8, gone: 6, ffaTime: 180 },
+  // pause: the banner time before the next round; matchPause: the results
+  // screen's countdown to the next match (the host can start it sooner)
+  rounds: { def: 5, min: 1, max: 15, by: 2, grace: 3, pause: 4, matchPause: 20, gone: 6, mins: { def: 3, min: 0.5, max: 15, step: 0.5 } },
+  // out of a team round: the camera rides a teammate who is still standing,
+  // over the shoulder (back / side / up m from the head, eased by follow per s;
+  // pulled in when a wall is in the way)
+  spectate: { back: 2.4, side: 0.55, up: 0.35, head: 1.55, follow: 10 },
   // ICE: how two browsers find a path to each other. STUN tells each one its
   // public address (a direct, peer-to-peer path); TURN relays the traffic when
   // no direct path exists — a VPN such as Cloudflare WARP / 1.1.1.1, mobile
@@ -76,9 +84,10 @@ var SXN = {
   score: null, focusN: 0, mode: 'teams', bots: 'few', protectUntil: 0, botN: 0,
   peer: null, conn: null, nextId: 0, started: false, applying: false, allowSpawn: false, lastBy: null,
   respawnT: -1, G: null, ui: null, allowGo: false,
-  winRounds: 5, roundLive: false, roundT0: 0, roundNextT: 0, matchOver: false, roundEndT: 0,
+  spec: null, winRounds: 5, roundMins: 3, roundLive: false, roundT0: 0, roundNextT: 0, matchOver: false, roundEndT: 0,
 }
 try { var SXN_wr0 = +localStorage.getItem('doomzone.rounds'); if (SXN_wr0 >= 1 && SXN_wr0 <= 15) SXN.winRounds = Math.round(SXN_wr0) } catch (e) { }
+try { var SXN_rm0 = +localStorage.getItem('doomzone.roundmins'); if (SXN_rm0 >= 0.5 && SXN_rm0 <= 15) SXN.roundMins = Math.round(SXN_rm0 * 2) / 2 } catch (e) { }
 window.SXN_MP = false
 window.SXN_NOEXT = false
 
@@ -110,7 +119,7 @@ function SXN_versus() {
   if (SXN_ffa()) return Object.keys(SXN.players).length > 1
   return SXN_teamSize('blue') > 0 && SXN_teamSize('red') > 0
 }
-function SXN_rosterMsg() { return { t: 'roster', players: SXN_roster(), mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds } }
+function SXN_rosterMsg() { return { t: 'roster', players: SXN_roster(), mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds, rm: SXN.roundMins } }
 // share of robots that still come (troopers/troopers.js, the stock waves below)
 function SXN_botScale() { return SXN.active ? (SXN_TUNE.bots[SXN.bots] != null ? SXN_TUNE.bots[SXN.bots] : 1) : 1 }
 function SXN_protected() { return SXN.active && performance.now() < SXN.protectUntil }
@@ -123,7 +132,7 @@ function SXN_updateMode() { window.SXN_NOEXT = SXN_versus(); SXN_refreshObjectiv
 function SXN_objectiveText() {
   var goal = ' · first to ' + SXN.winRounds + ' rounds, by ' + SXN_TUNE.rounds.by
   if (SXN_ffa() && SXN_versus()) return 'Free-for-all — most kills in each ' + SXN_ffaMins() + ' round' + goal
-  if (SXN_versus()) return SXN_teamName(SXN.team) + ' team — wipe out the other team' + goal
+  if (SXN_versus()) return SXN_teamName(SXN.team) + ' team — wipe out the other team (' + SXN_ffaMins() + ' max)' + goal
   return 'Squad up — fight the machines together'
 }
 function SXN_refreshObjective() {
@@ -406,7 +415,7 @@ function SXN_hostRecv(conn, m) {
     var team = (m.team === 'blue' || m.team === 'red') && !SXN_teamFull(m.team) ? m.team : SXN_teamSize('red') < SXN_teamSize('blue') ? 'red' : 'blue'
     var p = SXN_addPlayer({ id: id, name: SXN_clean(m.name), team: team })
     var G = SXN.G
-    conn.send({ t: 'welcome', id: id, code: SXN.code, map: SXN_mapName(), seed: String(G.params.seed || 4207), started: SXN.started, players: SXN_roster(), score: SXN.score, mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds, rt: SXN_roundLeft() })
+    conn.send({ t: 'welcome', id: id, code: SXN.code, map: SXN_mapName(), seed: String(G.params.seed || 4207), started: SXN.started, players: SXN_roster(), score: SXN.score, mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds, rm: SXN.roundMins, rt: SXN_roundLeft() })
     SXN_broadcast(SXN_rosterMsg())
     SXN_updateMode()
     SXN_feed('<b class="' + SXN_clsOf(p) + '">' + p.name + '</b> joined' + (SXN_ffa() ? '' : ' · ' + SXN_teamName(p.team)))
@@ -490,6 +499,7 @@ function SXN_join(code, name, team, cb) {
         if (SXN_TUNE.bots[m.bots] != null) SXN.bots = m.bots
         if (m.room) SXN.roomMax = m.room
         if (m.wr >= 1) SXN.winRounds = m.wr
+        if (m.rm > 0) SXN.roundMins = m.rm
         if (m.rt != null) { SXN.roundEndT = performance.now() + m.rt * 1000; SXN.roundLive = true }
         SXN.started = !!m.started
         SXN_activate()
@@ -589,6 +599,7 @@ function SXN_deactivate() {
   window.SXN_MP = false
   window.SXN_NOEXT = false
   try { document.body.classList.remove('sxn-mp') } catch (e) { }
+  try { SXN_resultsHide() } catch (e) { }
   for (var id in SXN.players) SXN_dropAvatar(SXN.players[id])
   for (var k in SXN.map) { var o = SXN.map[k]; if (o) { o.__net = null; o.__netKey = null } }
   SXN.map = {}
@@ -646,6 +657,14 @@ function SXN_install(G) {
     SXN_emit({ t: 'shot', o: [+o.x.toFixed(2), +o.y.toFixed(2), +o.z.toFixed(2)], d: [+ev.dir.x.toFixed(3), +ev.dir.y.toFixed(3), +ev.dir.z.toFixed(3)], w: SXN_weapon() })
   })
   G.events.on('player:dead', function () { if (SXN.active) SXN_localDeath() })
+  // spectate: the camera is placed right before each frame is drawn
+  if (G.render && typeof G.render.frame === 'function') {
+    var frame0 = G.render.frame
+    G.render.frame = function () { try { SXN_specFrame() } catch (e) { } return frame0.apply(this, arguments) }
+  }
+  document.addEventListener('mousedown', function (e) { if (SXN.spec) { SXN_specStep(e.button === 2 ? -1 : 1); e.preventDefault() } }, true)
+  document.addEventListener('contextmenu', function (e) { if (SXN.spec) e.preventDefault() }, true)
+  document.addEventListener('keydown', function (e) { if (SXN.spec && e.code === 'Space') { SXN_specStep(1); e.preventDefault() } }, true)
   G.events.on('game:state', function (ev) {
     if (!SXN.active || !ev) return
     if (ev.state === 'playing' && (ev.prev === 'intro' || ev.prev === 'title')) SXN_afterStart()
@@ -655,7 +674,7 @@ function SXN_install(G) {
       SXN.score = SXN_newScore()
       for (var id in SXN.players) { var q = SXN.players[id]; q.kills = 0; q.pk = 0; q.deaths = 0; q.tk = 0; q.rw = 0; q.rk = 0; q.dead = false; q.inRound = false }
       SXN.roundLive = true; SXN.roundT0 = performance.now(); SXN.roundNextT = 0; SXN.matchOver = false
-      SXN.roundEndT = SXN_ffa() ? performance.now() + SXN_TUNE.rounds.ffaTime * 1000 : 0
+      SXN.roundEndT = performance.now() + SXN_roundSecs() * 1000
       SXN_broadcast({ t: 'start' })
       SXN_pushScore()
     }
@@ -692,6 +711,7 @@ function SXN_handle(m) {
       if (m.bots && SXN_TUNE.bots[m.bots] != null) SXN.bots = m.bots
       if (m.room && SXN.role === 'guest') SXN.roomMax = m.room
       if (m.wr >= 1 && SXN.role === 'guest') SXN.winRounds = m.wr
+      if (m.rm > 0 && SXN.role === 'guest') SXN.roundMins = m.rm
       m.players.forEach(function (q) { SXN_addPlayer(q); keep[q.id] = 1 })
       for (var id in SXN.players) if (!keep[id]) SXN_removePlayer(id)
       SXN_updateMode()
@@ -1078,9 +1098,17 @@ function SXN_hostDeath(p, k) {
 function SXN_elim() { return SXN.active && SXN_versus() }
 // one life per round: team rounds only (free-for-all respawns, rounds are timed)
 function SXN_oneLife() { return SXN_elim() && !SXN_ffa() }
-function SXN_ffaMins() { var s = SXN_TUNE.rounds.ffaTime; return s % 60 ? s + '-second' : (s / 60) + '-minute' }
+// the round's length (s) and its name ("3-minute", "90-second")
+function SXN_roundSecs() { return Math.max(10, Math.round((+SXN.roundMins || SXN_TUNE.rounds.mins.def) * 60)) }
+function SXN_ffaMins() { var s = SXN_roundSecs(); return s % 60 ? s + '-second' : (s / 60) + '-minute' }
+// time up in a team round (host): more players standing takes it, equal = a draw
+function SXN_teamTimeUp() {
+  var sides = SXN_roundSides(), b = sides.blue ? sides.blue.alive : 0, r = sides.red ? sides.red.alive : 0
+  if (!sides.blue || !sides.red) { SXN.roundEndT = performance.now() + SXN_roundSecs() * 1000; return } // one team never showed up: the clock starts over
+  SXN_roundEnd(b > r ? 'blue' : r > b ? 'red' : null, { k: b + ':' + r, why: 'time' })
+}
 // seconds left in a timed (free-for-all) round, null when none runs
-function SXN_roundLeft() { return SXN.roundLive && SXN_ffa() && SXN.roundEndT ? Math.max(0, Math.round((SXN.roundEndT - performance.now()) / 100) / 10) : null }
+function SXN_roundLeft() { return SXN.roundLive && SXN.roundEndT ? Math.max(0, Math.round((SXN.roundEndT - performance.now()) / 100) / 10) : null }
 // time is up (host): the most kills this round takes it; a tie at the top, or no kills, is a draw
 function SXN_ffaRoundEnd() {
   var top = -1, who = [], id
@@ -1134,6 +1162,7 @@ function SXN_roundEnd(win, extra) {
   SXN_pushScore() // carries the round wins
   var m = { t: 'round', ph: match ? 'match' : 'end', win: win, round: S.round }
   if (extra) { m.k = extra.k; m.why = extra.why }
+  if (match) m.next = R.matchPause
   SXN_broadcast(m)
   SXN_roundMsg(m)
   SXN.matchOver = match
@@ -1143,16 +1172,19 @@ function SXN_roundGo() {
   var S = SXN.score
   if (SXN.matchOver) {
     S.blue.rw = 0; S.red.rw = 0; S.round = 1
-    for (var id in SXN.players) SXN.players[id].rw = 0
+    S.blue.pk = 0; S.red.pk = 0; S.blue.tk = 0; S.red.tk = 0
+    for (var id in SXN.players) { var q = SXN.players[id]; q.rw = 0; q.kills = 0; q.pk = 0; q.deaths = 0; q.tk = 0 }
   } else S.round = (S.round | 0) + 1
   SXN.matchOver = false
   for (var id2 in SXN.players) SXN.players[id2].rk = 0
-  var m = { t: 'round', ph: 'go', round: S.round, dur: SXN_ffa() ? SXN_TUNE.rounds.ffaTime : null }
+  var m = { t: 'round', ph: 'go', round: S.round, dur: SXN_roundSecs() }
   if (m.dur) { SXN.roundEndT = performance.now() + m.dur * 1000; SXN.roundLive = true }
   SXN_pushScore()
   SXN_broadcast(m)
   SXN_roundMsg(m)
 }
+// "2:1" → "BLUE 2 v 1 RED alive"
+function SXN_aliveLine(k) { var a = String(k || '0:0').split(':'); return 'BLUE ' + (a[0] | 0) + ' v ' + (a[1] | 0) + ' RED alive' }
 // a side's name for the banners
 function SXN_sideName(k) {
   if (k === 'blue' || k === 'red') return SXN_teamName(k).toUpperCase()
@@ -1179,16 +1211,170 @@ function SXN_roundMsg(m) {
       SXN_respawn()
       try { SXN.G.weapon.arsenal.resetPickups && SXN.G.weapon.arsenal.resetPickups() } catch (e) { }
     }
+    SXN_resultsHide()
     SXN_banner('ROUND ' + m.round + ' — ' + SXN_scoreLine(), 2.5)
     SXN_refreshUi()
     return
   }
   SXN.roundLive = false
   var who = m.win ? SXN_sideName(m.win) : null, mine = m.win && (m.win === SXN.myId || (!SXN_ffa() && m.win === SXN.team))
-  if (m.ph === 'match') SXN_banner((who === 'YOU' ? 'YOU WIN' : who + (SXN_ffa() ? ' WINS' : ' TEAM WINS')) + ' THE MATCH — ' + SXN_scoreLine() + ' · a new match starts soon', SXN_TUNE.rounds.matchPause)
-  else if (who) SXN_banner((who === 'YOU' ? 'YOU WIN' : who + ' WINS') + ' ROUND ' + m.round + (m.why === 'kills' ? ' with ' + m.k + ' kill' + (m.k === 1 ? '' : 's') : '') + ' — ' + SXN_scoreLine(), SXN_TUNE.rounds.pause)
-  else SXN_banner('ROUND ' + m.round + ' — DRAW, ' + (m.why === 'tie' ? 'tied on ' + m.k + ' kill' + (m.k === 1 ? '' : 's') : m.why === 'none' ? 'no kills' : 'nobody left standing') + ' · ' + SXN_scoreLine(), SXN_TUNE.rounds.pause)
+  if (m.ph === 'match') SXN_results(m)
+  else if (who) SXN_banner((who === 'YOU' ? 'YOU WIN' : who + ' WINS') + ' ROUND ' + m.round + (m.why === 'kills' ? ' with ' + m.k + ' kill' + (m.k === 1 ? '' : 's') : m.why === 'time' ? ' on time (' + SXN_aliveLine(m.k) + ')' : '') + ' — ' + SXN_scoreLine(), SXN_TUNE.rounds.pause)
+  else SXN_banner('ROUND ' + m.round + ' — DRAW, ' + (m.why === 'tie' ? 'tied on ' + m.k + ' kill' + (m.k === 1 ? '' : 's') : m.why === 'none' ? 'no kills' : m.why === 'time' ? 'time up with ' + SXN_aliveLine(m.k) : 'nobody left standing') + ' · ' + SXN_scoreLine(), SXN_TUNE.rounds.pause)
   SXN_refreshUi()
+}
+// ----------------------------------------------------- spectate
+// Out in a team round (SXN_oneLife): the camera follows a teammate still
+// standing, over the shoulder, until the next round. Left click / Space: the
+// next teammate, right click: the previous one. The gun in your hands is put
+// away; a bar at the bottom says who you watch and who is still standing.
+function SXN_specOn() {
+  var G = SXN.G
+  return SXN.active && SXN_oneLife() && SXN_inGame() && G.player && !G.player.alive && !(SXN.ui && SXN.ui.res && SXN.ui.res.classList.contains('on'))
+}
+function SXN_specTargets() {
+  var out = []
+  Object.keys(SXN.players).sort().forEach(function (id) {
+    var p = SXN.players[id]
+    if (id !== SXN.myId && p.team === SXN.team && !p.dead && p.av && p.av.visible && SXN_inRound(p)) out.push(id)
+  })
+  return out
+}
+function SXN_specStep(d) {
+  var list = SXN_specTargets(), S = SXN.spec
+  if (!S || !list.length) return
+  var i = list.indexOf(S.id)
+  S.id = list[(i < 0 ? 0 : i + d + list.length) % list.length]
+  S.snap = true
+}
+var SXN_specV = null
+// every frame, before the scene is drawn (G.render.frame is wrapped in SXN_install)
+function SXN_specFrame() {
+  var G = SXN.G, ui = SXN.ui, on = SXN_specOn()
+  if (!on) {
+    if (SXN.spec) { SXN.spec = null; if (ui && ui.spec) ui.spec.classList.remove('on') }
+    return
+  }
+  if (!SXN_specV) SXN_specV = { pos: new lt.Vector3(), look: new lt.Vector3(), head: new lt.Vector3(), c: new lt.Vector3(), f: new lt.Vector3(), r: new lt.Vector3() }
+  var S = SXN.spec, now = performance.now()
+  if (!S) {
+    S = SXN.spec = { id: null, t: now, snap: true, look: new lt.Vector3(), pos: new lt.Vector3() }
+    try { G.weapon.setVisible && G.weapon.setVisible(false) } catch (e) { }
+  }
+  var dt = Math.min(0.1, (now - S.t) / 1000); S.t = now
+  var list = SXN_specTargets()
+  if (S.id == null || list.indexOf(S.id) < 0) { S.id = list[0] || null; S.snap = true }
+  var p = S.id && SXN.players[S.id], T = SXN_TUNE.spectate, V = SXN_specV
+  if (p && p.av) {
+    var grp = p.av.grp, yaw = grp.rotation.y, pitch = p.av.st && p.av.st.aimPitch || 0
+    V.head.copy(grp.position); V.head.y += T.head
+    V.f.set(-Math.sin(yaw), 0, -Math.cos(yaw)); V.r.set(Math.cos(yaw), 0, -Math.sin(yaw))
+    // over the shoulder, pulled in when a wall is in the way
+    var picked = false
+    for (var k = 0; k < 5 && !picked; k++) {
+      var d = T.back * (1 - k * 0.2)
+      V.c.copy(V.head).addScaledVector(V.f, -d).addScaledVector(V.r, T.side * (d / T.back)); V.c.y += T.up * (d / T.back)
+      var clear = true
+      try { clear = G.physics.lineOfSight(V.head, V.c) } catch (e) { }
+      if (clear) picked = true
+    }
+    if (!picked) V.c.copy(V.head).addScaledVector(V.f, -0.3)
+    V.look.copy(V.head).addScaledVector(V.f, 10 * Math.cos(pitch)); V.look.y += 10 * Math.sin(pitch)
+    var a = S.snap ? 1 : 1 - Math.exp(-dt * T.follow)
+    S.pos.lerp(V.c, a); S.look.lerp(V.look, a); S.snap = false
+    G.camera.position.copy(S.pos)
+    G.camera.lookAt(S.look)
+    G.camera.updateMatrixWorld()
+  }
+  if (ui && ui.spec) {
+    var name = p ? p.name : null, txt = (name ? 'Spectating <b>' + String(name).replace(/[<>&"']/g, '') + '</b>' + (list.length > 1 ? ' (' + (list.indexOf(S.id) + 1) + '/' + list.length + ') · click / Space: next · right click: previous' : '') : 'No teammate to watch') + '<br><span>' + SXN_outText() + '</span>'
+    if (ui.spec._t !== txt) { ui.spec._t = txt; ui.spec.innerHTML = txt }
+    if (!ui.spec.classList.contains('on')) ui.spec.classList.add('on')
+  }
+}
+
+// ----------------------------------------------------- match results
+// Everyone, when the host calls the match: who won (VICTORY / DEFEAT for you),
+// the final score and each player's match: player kills, deaths, K/D, robots
+// downed (free-for-all: rounds won too), the MVP starred. Buttons: Main menu
+// (leave the room, back to the title) for all; Next match for the host. The
+// next match starts by itself when the countdown runs out.
+function SXN_results(m) {
+  var ui = SXN.ui, G = SXN.G
+  if (!ui) return
+  if (!ui.res) {
+    var el = document.createElement('div')
+    el.className = 'sxn-res'
+    el.innerHTML = '<div class="sxn-res-card" role="dialog" aria-label="Match results"><p class="sxn-res-k"></p><h2 class="sxn-res-h"></h2><p class="sxn-res-s"></p>' +
+      '<div class="sxn-res-t"></div><p class="sxn-res-n"></p>' +
+      '<div class="sxn-res-a"><button class="btn sxn-res-menu" type="button">Main menu</button><button class="btn primary sxn-res-next" type="button">Next match</button></div></div>'
+    ;(document.getElementById('app') || document.body).appendChild(el)
+    el.addEventListener('keydown', function (e) { e.stopPropagation() })
+    el.querySelector('.sxn-res-menu').addEventListener('click', function () { SXN_toMenu() })
+    el.querySelector('.sxn-res-next').addEventListener('click', function () { if (SXN.role === 'host' && !SXN.roundLive && SXN.matchOver) SXN.roundNextT = 0.01 })
+    ui.res = el
+  }
+  var ffa = SXN_ffa(), win = m.win, mine = win && (win === SXN.myId || (!ffa && win === SXN.team))
+  var q = function (s) { return ui.res.querySelector(s) }
+  q('.sxn-res-k').textContent = mine ? 'VICTORY' : 'DEFEAT'
+  q('.sxn-res-k').className = 'sxn-res-k ' + (mine ? 'win' : 'lose')
+  q('.sxn-res-h').textContent = ffa ? (win === SXN.myId ? 'YOU WIN THE MATCH' : SXN_sideName(win) + ' WINS THE MATCH') : SXN_teamName(win).toUpperCase() + ' TEAM WINS'
+  q('.sxn-res-h').className = 'sxn-res-h ' + (ffa ? '' : win)
+  q('.sxn-res-s').textContent = SXN_scoreLine() + ' · ' + (SXN.score ? (SXN.score.round | 0) : 0) + ' rounds played'
+  // the table: teams side by side in order (the winners first), best first
+  var rows = Object.keys(SXN.players).map(function (id) {
+    var p = SXN.players[id], pk = p.pk | 0, d = p.deaths | 0
+    return { id: id, name: p.name, team: p.team, pk: pk, d: d, kd: d ? pk / d : pk, bots: Math.max(0, (p.kills | 0) - pk), rw: p.rw | 0 }
+  })
+  var mvp = rows.slice().sort(function (a, b) { return b.pk - a.pk || a.d - b.d || b.bots - a.bots })[0]
+  rows.sort(function (a, b) {
+    if (ffa) return b.rw - a.rw || b.pk - a.pk || a.d - b.d
+    if (a.team !== b.team) return a.team === win ? -1 : 1
+    return b.pk - a.pk || a.d - b.d
+  })
+  var esc = function (s) { return String(s).replace(/[<>&"']/g, '') }
+  var html = '<table><thead><tr><th class="n">Player</th>' + (ffa ? '<th>Rounds</th>' : '') + '<th>Kills</th><th>Deaths</th><th>K/D</th><th>Robots</th></tr></thead><tbody>'
+  rows.forEach(function (r) {
+    var cls = (r.id === SXN.myId ? 'me ' : '') + (ffa ? '' : r.team)
+    html += '<tr class="' + cls + '"><td class="n">' + (ffa ? '' : '<i class="sxn-dot ' + r.team + '"></i>') + esc(r.name) + (r.id === SXN.myId ? ' <span>(you)</span>' : '') + (mvp && r.id === mvp.id && (mvp.pk > 0 || mvp.bots > 0) ? ' <b class="mvp">★ MVP</b>' : '') + '</td>' +
+      (ffa ? '<td>' + r.rw + '</td>' : '') + '<td>' + r.pk + '</td><td>' + r.d + '</td><td>' + r.kd.toFixed(2) + '</td><td>' + r.bots + '</td></tr>'
+  })
+  q('.sxn-res-t').innerHTML = html + '</tbody></table>'
+  q('.sxn-res-next').hidden = SXN.role !== 'host'
+  ui.resEndT = performance.now() + (m.next || SXN_TUNE.rounds.matchPause) * 1000
+  SXN_resultsTick()
+  ui.res.classList.add('on')
+  // free the mouse for the buttons without the game pausing (as the bag does)
+  try { if (typeof SXM !== 'undefined' && SXM) SXM.holdPause = true } catch (e) { }
+  try { document.pointerLockElement && document.exitPointerLock() } catch (e) { }
+  try { G.player.enabled = false } catch (e) { }
+  // nobody gets hurt while reading it (robots keep going)
+  SXN.protectUntil = performance.now() + ((m.next || SXN_TUNE.rounds.matchPause) + 1) * 1000
+}
+function SXN_resultsTick() {
+  var ui = SXN.ui
+  if (!ui || !ui.res || !ui.res.classList.contains('on')) return
+  var s = Math.max(0, Math.ceil((ui.resEndT - performance.now()) / 1000))
+  var t = 'Next match in ' + s + ' s' + (SXN.role === 'host' ? ' — or start it now' : ' — the host can start it sooner')
+  if (ui.res._t !== t) { ui.res._t = t; ui.res.querySelector('.sxn-res-n').textContent = t }
+}
+function SXN_resultsHide() {
+  var ui = SXN.ui, G = SXN.G
+  if (!ui || !ui.res || !ui.res.classList.contains('on')) return
+  ui.res.classList.remove('on')
+  try { G.player.enabled = true } catch (e) { }
+  try { if (G.input && !G.input.touch && G.game && G.game.state === 'playing' && G.input.requestLock) G.input.requestLock() } catch (e) { }
+  setTimeout(function () { try { if (typeof SXM !== 'undefined' && SXM && !SXM.open) SXM.holdPause = false } catch (e) { } }, 400)
+}
+// leave the room and go back to the title (the page reloads without the
+// room in its link, so it does not rejoin)
+function SXN_toMenu() {
+  try { SXN_leave() } catch (e) { }
+  var p = new URLSearchParams(location.search)
+  ;['autostart', 'shot', 'cam', 'bench', 'dt', 'join', 'host', 'room', 'team', 'mode', 'bots', 'seed'].forEach(function (k) { p.delete(k) })
+  if (typeof SX_MAP !== 'undefined') p.set('map', SX_MAP)
+  var q = p.toString()
+  setTimeout(function () { location.href = location.pathname + (q ? '?' + q : '') }, 150)
 }
 // the dead player's screen while the round goes on
 function SXN_outText() {
@@ -1230,6 +1416,19 @@ function SXN_pickRounds(n) {
   SXN_updateMode()
   SXN_refreshUi()
   SXN_status('First to ' + n + ' round' + (n > 1 ? 's' : '') + ', winning by ' + R.by)
+}
+function SXN_pickMins(v) {
+  if (!SXN.active || SXN.role !== 'host' || SXN_inGame()) return
+  var R = SXN_TUNE.rounds.mins
+  v = Math.round((+v) / R.step) * R.step
+  if (!(v >= R.min)) v = R.min
+  v = Math.min(R.max, v)
+  SXN.roundMins = v
+  try { localStorage.setItem('doomzone.roundmins', String(v)) } catch (e) { }
+  SXN_broadcast(SXN_rosterMsg())
+  SXN_updateMode()
+  SXN_refreshUi()
+  SXN_status('Rounds of ' + SXN_ffaMins().replace('-', ' ') + 's at most')
 }
 function SXN_pickBots(b) {
   if (!SXN.active || SXN.role !== 'host' || SXN_inGame() || SXN_TUNE.bots[b] == null) return
@@ -1537,17 +1736,19 @@ function SXN_tick(dt) {
       if (SXN.respawnT <= 0) SXN_respawn()
     } else if (!G.player.alive) {
       // out for the round; if the other side is gone (no versus any more), the old respawn
-      if (SXN_oneLife()) SXN_overlay(SXN_outText())
+      if (SXN_oneLife()) SXN_overlay(null) // (the spectate bar says it: SXN_specFrame)
       else SXN.respawnT = SXN_TUNE.respawn
     }
+    SXN_resultsTick()
     if (SXN.role === 'host') {
       SXN_acc.rc = (SXN_acc.rc || 0) + dt
       if (SXN_acc.rc >= 0.25) { SXN_acc.rc = 0; SXN_roundCheck() }
       if (!SXN.roundLive && SXN.roundNextT > 0) { SXN.roundNextT -= dt; if (SXN.roundNextT <= 0) SXN_roundGo() }
-      // a timed free-for-all round is up (alone in the room: the clock just starts over)
-      if (SXN.roundLive && SXN_ffa() && SXN.score && SXN.roundEndT && performance.now() >= SXN.roundEndT) {
-        if (SXN_versus()) SXN_ffaRoundEnd()
-        else SXN.roundEndT = performance.now() + SXN_TUNE.rounds.ffaTime * 1000
+      // the round's time is up (no versus — alone, one team — the clock just starts over)
+      if (SXN.roundLive && SXN.score && SXN.roundEndT && performance.now() >= SXN.roundEndT) {
+        if (!SXN_versus()) SXN.roundEndT = performance.now() + SXN_roundSecs() * 1000
+        else if (SXN_ffa()) SXN_ffaRoundEnd()
+        else SXN_teamTimeUp()
       }
     }
   }
@@ -1581,6 +1782,7 @@ function SXN_buildUi() {
     '<div class="sxn-size"><span>Players</span><button type="button" class="sxn-dec" aria-label="Fewer players">−</button><b class="sxn-sizev">8</b><button type="button" class="sxn-inc" aria-label="More players">+</button><i class="sxn-sizen"></i></div>' +
     '<div class="sxn-bots" role="radiogroup" aria-label="Robots"><span>Robots</span><button type="button" data-bots="many" role="radio">Many</button><button type="button" data-bots="few" role="radio">Few</button><button type="button" data-bots="off" role="radio">Off</button></div>' +
     '<div class="sxn-rounds"><span>Rounds to win</span><input class="sxn-roundsv" type="number" inputmode="numeric" min="1" max="15" step="1" aria-label="Rounds to win"><i class="sxn-roundsn"></i></div>' +
+    '<div class="sxn-rounds sxn-mins"><span>Minutes per round</span><input class="sxn-minsv" type="number" inputmode="decimal" min="0.5" max="15" step="0.5" aria-label="Minutes per round"><i class="sxn-minsn"></i></div>' +
     '<div class="sxn-ffa"><h4>Free-for-all <span></span></h4><ol></ol></div>' +
     '<div class="sxn-teams">' +
     '<div class="sxn-col blue"><h4>Blue team <span></span></h4><ol></ol><button class="btn sxn-pick" type="button" data-team="blue">Join Blue</button></div>' +
@@ -1609,6 +1811,9 @@ function SXN_buildUi() {
   ui.rounds = q('.sxn-roundsv'); ui.roundsN = q('.sxn-roundsn')
   ui.rounds.min = SXN_TUNE.rounds.min; ui.rounds.max = SXN_TUNE.rounds.max
   ui.rounds.addEventListener('change', function () { SXN_pickRounds(ui.rounds.value) })
+  ui.mins = q('.sxn-minsv'); ui.minsN = q('.sxn-minsn')
+  ui.mins.min = SXN_TUNE.rounds.mins.min; ui.mins.max = SXN_TUNE.rounds.mins.max; ui.mins.step = SXN_TUNE.rounds.mins.step
+  ui.mins.addEventListener('change', function () { SXN_pickMins(ui.mins.value) })
   ui.botBtns = panel.querySelectorAll('.sxn-bots button')
   ui.botBtns.forEach(function (b) { b.addEventListener('click', function () { SXN_pickBots(b.dataset.bots) }) })
   // typing in the panel must not drive the game (Enter starts on the title)
@@ -1675,6 +1880,7 @@ function SXN_buildUi() {
   ui.banner = document.createElement('div'); ui.banner.className = 'sxn-banner'; hudRoot.appendChild(ui.banner)
   ui.over = document.createElement('div'); ui.over.className = 'sxn-over'; hudRoot.appendChild(ui.over)
   ui.prot = document.createElement('div'); ui.prot.className = 'sxn-prot'; hudRoot.appendChild(ui.prot)
+  ui.spec = document.createElement('div'); ui.spec.className = 'sxn-spec'; hudRoot.appendChild(ui.spec)
   SXN.ui = ui
   return ui
 }
@@ -1755,7 +1961,10 @@ function SXN_refreshUi() {
   })
   if (document.activeElement !== ui.rounds) ui.rounds.value = SXN.winRounds
   ui.rounds.disabled = SXN.role !== 'host' || inGame
-  ui.roundsN.textContent = 'win by ' + SXN_TUNE.rounds.by + ' · a round = ' + (ffa ? SXN_ffaMins() + ', most kills' : 'a team wiped out')
+  ui.roundsN.textContent = 'win by ' + SXN_TUNE.rounds.by + ' · a round = ' + (ffa ? 'most kills when the time is up' : 'a team wiped out')
+  if (document.activeElement !== ui.mins) ui.mins.value = SXN.roundMins
+  ui.mins.disabled = SXN.role !== 'host' || inGame
+  ui.minsN.textContent = ffa ? 'the round lasts this long' : 'time up: more players standing wins (equal = draw)'
   ui.teams.hidden = ffa
   ui.ffa.hidden = !ffa
   if (ffa) {
@@ -1787,7 +1996,7 @@ function SXN_refreshUi() {
   ui.note.textContent = (ffa
     ? 'Free-for-all: every player is everyone else\'s enemy, and the robots fight everybody. Rounds of ' + SXN_ffaMins().replace('-', ' ') + 's with respawns: the most player kills in the round takes it (a tie is a draw). First to ' + SXN.winRounds + ' rounds with a ' + SXN_TUNE.rounds.by + '-round lead wins the match.'
     : (inGame ? 'Leave the mission (pause → quit) to switch teams. ' : 'Pick a team, then get ready. ') +
-      (vs ? 'Blue vs Red: the robots fight both teams, and the teams fight each other. One life per round: wipe out the other team to take it. First to ' + SXN.winRounds + ' rounds with a ' + SXN_TUNE.rounds.by + '-round lead wins the match (' + Math.max(SXN.winRounds, 1) + ':' + Math.max(0, SXN.winRounds - 1) + ' plays on).'
+      (vs ? 'Blue vs Red: the robots fight both teams, and the teams fight each other. One life per round: wipe out the other team to take it, or have more players standing when the ' + SXN_ffaMins() + ' clock runs out. First to ' + SXN.winRounds + ' rounds with a ' + SXN_TUNE.rounds.by + '-round lead wins the match (' + Math.max(SXN.winRounds, 1) + ':' + Math.max(0, SXN.winRounds - 1) + ' plays on).'
         : 'Everyone on one team = co-op: fight the machines together.')) +
     (SXN.role === 'host' && !inGame ? ' Only the host picks the map, the mode and the robots.' : '') +
     (SXN.role === 'host'

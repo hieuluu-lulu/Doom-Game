@@ -89,13 +89,14 @@ function SXK_tick(dt) {
     ui.ffa.classList.toggle('on', !!ffa)
   }
   // round wins (net/net.js rounds): the round, the target, the lead it needs
-  var goal = 'ROUND ' + (SXN.score.round | 0 || 1) + ' · FIRST TO ' + SXN.winRounds + ' · BY ' + SXN_TUNE.rounds.by
+  // (rooms only: SXN.score is null solo) the round, its clock, the target
+  var left = vs && typeof SXN_roundLeft === 'function' ? SXN_roundLeft() : null
+  var clock = left == null ? 'ROUND OVER' : Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2)
+  var goal = vs ? 'ROUND ' + (SXN.score.round | 0 || 1) + ' · ' + clock + ' · FIRST TO ' + SXN.winRounds + ' · BY ' + SXN_TUNE.rounds.by : ''
   if (ffa) {
     // you vs whoever leads in round wins; this round's clock and kills
     var me = SXN.players[SXN.myId], best = null, topK = 0
     for (var id in SXN.players) { var q = SXN.players[id]; topK = Math.max(topK, q.rk | 0); if (id !== SXN.myId && (!best || (q.rw | 0) > (best.rw | 0))) best = q }
-    var left = typeof SXN_roundLeft === 'function' ? SXN_roundLeft() : null
-    var clock = left == null ? 'ROUND OVER' : Math.floor(left / 60) + ':' + ('0' + Math.floor(left % 60)).slice(-2)
     SXK_set(ui.me, '_v', String(me ? me.rw | 0 : 0))
     SXK_set(ui.lead, '_v', best ? best.name.toUpperCase() + ' ' + (best.rw | 0) : '')
     SXK_set(ui.fi, '_v', 'ROUND ' + (SXN.score.round | 0 || 1) + ' · ' + clock + ' · KILLS ' + (me ? me.rk | 0 : 0) + ' / TOP ' + topK + ' · FIRST TO ' + SXN.winRounds + ' BY ' + SXN_TUNE.rounds.by)

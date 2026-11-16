@@ -25,6 +25,16 @@ var SXA_TUNE = {
   // the PAC-9 as a pickup (maps whose rooms start on the pistol, level.mpKit
   // 'pistol'): a full magazine + `pickup` rounds; when you have it, `crate` rounds
   rifle: { pickup: 60, crate: 60 },
+  // the PAC-9's 4x scope: an ACOG-style prism scope (arsenal/assets/scope4x.glb,
+  // "4x Scope" by Monstr 3d, CC-BY-4.0) in place of the built-in red dot.
+  // len: its length (m); z: its middle on the receiver (viewmodel z, the red
+  // dot sits at -0.021); flip: turn it end for end; adsZ: the aim pose's
+  // distance (the eye ~4–5 cm behind the eyepiece); reticle: the red chevron's
+  // size and the black crosshair / post (m, drawn at the objective lens).
+  // Fully aimed (ads > 0.88) the view is the scope's own: a wide round window
+  // with the eyepiece's dark rim, a red chevron and the BDC post (.sx-acog) —
+  // looking down the model's tube would only show a pinhole of world
+  scope4x: { len: 0.136, z: -0.016, flip: true, adsZ: -0.1, reticle: { chevron: 0.0016, bar: 0.00032, line: 0.00016, post: 0.006 } },
   rifleCrate: 60,
   rifleDrop: 30,
   shotgun: {
@@ -541,6 +551,7 @@ function SXA_pistolGeoModel(PM) {
 // own scope is the gun's optic (x8, or x4 when that is fitted).
 var SXA_SNM = null;
 var SXA_KNM = null; // knife_animated.glb (arms + knife, skinned, one clip)
+var SXA_S4M = null; // scope4x.glb (the PAC-9's 4x scope, an ACOG-style prism scope)
 async function SXA_loadSniperModel() {
   if (typeof SX_ASSET_sniper !== 'string' || typeof SX_parseGLB !== 'function') return null;
   var g = await SX_parseGLB(SX_ASSET_sniper);
@@ -1578,6 +1589,7 @@ async function SXA_createArsenal(G) {
     SX_timeout(SXA_loadPistolModel(), 8000, 'pistol model').catch(function (err) { console.warn('[arsenal] pistol model not loaded, procedural M7: ' + (err && err.message || err)); return null; }),
     SX_timeout(SXA_loadSniperModel(), 8000, 'sniper model').catch(function (err) { console.warn('[arsenal] sniper model not loaded, procedural SR-3: ' + (err && err.message || err)); return null; }),
     SX_timeout(typeof SX_ASSET_knife === 'string' ? SX_parseGLB(SX_ASSET_knife) : Promise.reject(new Error('no asset')), 8000, 'knife model').catch(function (err) { console.warn('[arsenal] knife model not loaded, procedural knife: ' + (err && err.message || err)); return null; }),
+    SX_timeout(typeof SX_ASSET_scope4x === 'string' ? SX_parseGLB(SX_ASSET_scope4x) : Promise.reject(new Error('no asset')), 8000, '4x scope model').catch(function (err) { console.warn('[arsenal] 4x scope model not loaded, simple PAC-9 4x: ' + (err && err.message || err)); return null; }),
     (function () {
       var lp = SXA_loadProps().then(function (P) { SXA_PROPS = P; if (SXA_propsSwap) SXA_propsSwap(); return P; }, function (err) { console.warn('[arsenal] pickup props not loaded, procedural kit: ' + (err && err.message || err)); return null; });
       return SX_timeout(lp, 6000, 'pickup props').catch(function () { return null; });
@@ -1587,6 +1599,7 @@ async function SXA_createArsenal(G) {
   SXA_PSM = models[1];
   SXA_SNM = models[2];
   SXA_KNM = models[3];
+  SXA_S4M = models[4];
   try {
     return SXA_buildArsenal(G, rifle);
   } catch (err) {
@@ -2707,8 +2720,12 @@ function SXA_buildArsenal(G, rifle) {
     rifle.root.traverse(function (o) {
       if (!o.isMesh || !o.geometry || !o.material || Array.isArray(o.material)) return;
       if (/glove|hand|sleeve/i.test(o.material.name || '')) return;
-      for (var a = o; a && a !== rifle.root; a = a.parent) if (a.visible === false) return;
-      var g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      // (the red dot's lens may be hidden right now: the 4x scope is on the PAC-9)
+      var hid = S4.cut && S4.cut.some(function (c) { return c.mesh === o && c.lens; });
+      for (var a = o; a && a !== rifle.root; a = a.parent) if ((a.visible === false && !(hid && a === o)) || a === rifle.mounts.root) return;
+      var src0 = S4.cut && S4.cut.filter(function (c) { return c.mesh === o && c.full; })[0];
+      var g = (src0 ? src0.full : o.geometry);
+      g = g.index ? g.toNonIndexed() : g.clone();
       mm.multiplyMatrices(inv, o.matrixWorld);
       g.applyMatrix4(mm);
       var pa = g.attributes.position, keep = [];
@@ -2743,11 +2760,107 @@ function SXA_buildArsenal(G, rifle) {
     g.name = 'pac9-sight';
     return g;
   }
+  // ---- the PAC-9's 4x scope (SXA_S4M) ----
+  // The model's frame is read off its geometry: the optical axis runs through
+  // the two thin glass discs (its lenses), the base is its lowest point, its
+  // length sets the scale. The scope sits on the rail where the red dot was
+  // (the red dot comes off the receiver while it is on), the aim pose drops to
+  // its axis and the reticle is drawn at the objective lens: you look through
+  // the eyepiece at the world zoomed 4x — no sniper overlay.
+  var S4 = { info: null, cut: null, on: false };
+  var qv0 = (function () { try { return qv.p.slice(); } catch (e) { return null; } })();
+  function scope4xInfo() {
+    if (S4.info) return S4.info;
+    var root = SXA_S4M.scene;
+    root.updateMatrixWorld(true);
+    var box = new lt.Box3().setFromObject(root), lenses = [];
+    root.traverse(function (o) {
+      if (!o.isMesh || !o.material || !o.material.transparent) return;
+      var b = new lt.Box3().setFromObject(o), sz = b.getSize(new lt.Vector3());
+      if (sz.z < Math.min(sz.x, sz.y) * 0.2) lenses.push({ c: b.getCenter(new lt.Vector3()), r: Math.min(sz.x, sz.y) / 2 });
+    });
+    if (lenses.length < 2) throw new Error('4x scope lenses not found');
+    lenses.sort(function (p, q) { return p.c.z - q.c.z; });
+    var T = TU.scope4x, k = T.len / (box.max.z - box.min.z), lo = lenses[0], hi = lenses[lenses.length - 1];
+    var ax = (lo.c.x + hi.c.x) / 2, ay = (lo.c.y + hi.c.y) / 2, mz = (box.min.z + box.max.z) / 2;
+    // model +z is the gun's forward (-z) unless flipped; the objective = the forward lens
+    var fwd = T.flip ? 1 : -1, obj = T.flip ? lo : hi;
+    S4.info = { k: k, ax: ax, ay: ay, base: box.min.y, mz: mz, fwd: fwd, objZ: (obj.c.z - mz) * k * fwd, objR: obj.r * k, axisH: (ay - box.min.y) * k };
+    return S4.info;
+  }
+  function scope4x(mt) {
+    var I = scope4xInfo(), T = TU.scope4x, rail = mi.railTop || 0.0435;
+    var outer = new lt.Group(), inner = SXA_S4M.scene.clone(true);
+    if (!S4.glass) {
+      // the model's glass reads as white haze against the sky: dark coated
+      // lenses, a faint smoked cover on the fibre optic
+      S4.glass = true;
+      SXA_S4M.scene.traverse(function (o) {
+        if (!o.isMesh || !o.material || !o.material.transparent) return;
+        var mt2 = o.material, b = new lt.Box3().setFromObject(o).getSize(new lt.Vector3()), lens = b.z < Math.min(b.x, b.y) * 0.2;
+        if (mt2.color) mt2.color.set(lens ? 0x14242a : 0x30383a);
+        mt2.opacity = lens ? 0.9 : 0.35; mt2.metalness = lens ? 0.65 : 0.2; mt2.roughness = 0.12; mt2.depthWrite = lens;
+        mt2.needsUpdate = true;
+      });
+    }
+    inner.position.set(-I.ax, -I.base, -I.mz);
+    var mid = new lt.Group();
+    mid.add(inner);
+    mid.scale.setScalar(I.k);
+    mid.rotation.y = I.fwd < 0 ? Math.PI : 0; // model +z forward: turned round onto the gun's -z
+    mid.position.set(0, rail, T.z);
+    outer.add(mid);
+    mid.traverse(function (o) { if (o.isMesh) { o.frustumCulled = false; o.castShadow = false; o.receiveShadow = true; if (o.material && o.material.transparent) o.renderOrder = 2; } });
+    // the reticle at the objective lens, on the axis (a red chevron, a fine black
+    // crosshair and a post below it)
+    var R = T.reticle, ly = rail + I.axisH, lz = T.z + I.objZ + 0.001;
+    var red = viewMats.ret, blk = new lt.MeshBasicMaterial({ color: 0x050505, side: lt.DoubleSide });
+    var bar = function (mat, w, h, x, y, rz) { var m = new lt.Mesh(new lt.PlaneGeometry(w, h), mat); m.position.set(x, y, lz); m.rotation.z = rz || 0; m.renderOrder = 3; outer.add(m); return m; };
+    var c = R.chevron, aSlope = 0.62;
+    bar(red, c, R.bar, -c * 0.5 * Math.cos(aSlope), ly - c * 0.5 * Math.sin(aSlope), aSlope);
+    bar(red, c, R.bar, c * 0.5 * Math.cos(aSlope), ly - c * 0.5 * Math.sin(aSlope), -aSlope);
+    var hw = I.objR * 0.95;
+    bar(blk, hw - c * 1.2, R.line, -(hw + c * 1.2) / 2, ly, 0);
+    bar(blk, hw - c * 1.2, R.line, (hw + c * 1.2) / 2, ly, 0);
+    bar(blk, R.line * 1.6, R.post, 0, ly - c * 1.1 - R.post / 2, 0);
+    outer.name = 'pac9-4x';
+    S4.line = ly;
+    return outer;
+  }
+  // the PAC-9's built-in red dot off (the 4x scope takes its place) or back on:
+  // its triangles cut from the receiver meshes (PAC9_SIGHT.box), its lens hidden
+  function rifleRedDot(on) {
+    if (!S4.cut) {
+      S4.cut = [];
+      var B = PAC9_SIGHT.box, mnt = rifle.mounts && rifle.mounts.root;
+      rifle.root.children.forEach(function (o) {
+        if (o === mnt || !o.isMesh || !o.geometry || !o.material || Array.isArray(o.material)) return;
+        if (/glove|hand|sleeve/i.test(o.material.name || '')) return;
+        if (o.material.isShaderMaterial) { if (o.position.z > -0.3) S4.cut.push({ mesh: o, lens: true }); return; } // the red dot's lens (not the muzzle flash)
+        var src = o.geometry, g = src.index ? src.toNonIndexed() : src.clone(), pa = g.attributes.position, keep = [], drop = 0, v = new lt.Vector3();
+        o.updateMatrix();
+        for (var t = 0; t + 2 < pa.count; t += 3) {
+          v.set((pa.getX(t) + pa.getX(t + 1) + pa.getX(t + 2)) / 3, (pa.getY(t) + pa.getY(t + 1) + pa.getY(t + 2)) / 3, (pa.getZ(t) + pa.getZ(t + 1) + pa.getZ(t + 2)) / 3).applyMatrix4(o.matrix);
+          if (v.x > B.x0 && v.x < B.x1 && v.y > B.y0 && v.y < B.y1 && v.z > B.z0 && v.z < B.z1) drop++; else keep.push(t);
+        }
+        if (!drop) return;
+        var ng = new lt.BufferGeometry();
+        for (var nm in g.attributes) {
+          var at = g.attributes[nm], arr = new Float32Array(keep.length * 3 * at.itemSize), w = 0;
+          keep.forEach(function (t0) { for (var j = 0; j < 3; j++) for (var cc = 0; cc < at.itemSize; cc++) arr[w++] = at.getComponent(t0 + j, cc); });
+          ng.setAttribute(nm, new lt.BufferAttribute(arr, at.itemSize));
+        }
+        ng.computeBoundingSphere();
+        S4.cut.push({ mesh: o, full: src, cut: ng });
+      });
+    }
+    S4.cut.forEach(function (c) { if (c.lens) c.mesh.visible = on; else c.mesh.geometry = on ? c.full : c.cut; });
+  }
   function applyAttachments(kind) {
     var g = guns[kind], a = L.att[kind] || {}, mounts = SXA_MOUNTS[kind] || {};
     var groups = g.mounts || {};
     for (var gk in groups) { var grp = groups[gk]; while (grp.children.length) grp.remove(grp.children[0]); }
-    var line = null;
+    var line = null, scoped4 = false;
     for (var slot in a) {
       var id = a[slot], mt = mounts[slot];
       if (!id || !mt) continue;
@@ -2758,6 +2871,7 @@ function SXA_buildArsenal(G, rifle) {
       var holder = new lt.Group();
       var built = false;
       if (id === 'reddot') { try { holder.add(pac9Sight(mt)); built = true; } catch (e) { if (!PAC9_SIGHT.warned) { PAC9_SIGHT.warned = true; console.warn('[arsenal] PAC-9 sight unavailable, simple red dot', e); } } }
+      if (id === 'x4' && kind === 'rifle' && SXA_S4M) { try { holder.add(scope4x(mt)); built = true; scoped4 = true; } catch (e) { if (!S4.warned) { S4.warned = true; console.warn('[arsenal] 4x scope model unavailable, simple 4x', e); } } }
       if (!built) SXA_addParts(holder, SXA_attGeo(id, mt), viewMats, SXA_vmMesh);
       grp2.add(holder);
       holder.traverse(function (o) { o.layers.set(zc); });
@@ -2777,6 +2891,9 @@ function SXA_buildArsenal(G, rifle) {
     });
     g.attMods = m;
     if (kind === 'rifle') {
+      try { rifleRedDot(!scoped4); } catch (e) { console.warn('[arsenal] red dot toggle', e); }
+      S4.on = scoped4;
+      if (qv0) { qv.p[1] = scoped4 ? -S4.line : qv0[1]; qv.p[2] = scoped4 ? TU.scope4x.adsZ : qv0[2]; }
       SXA_RMOD.recoil = TU.recoil.rifle * m.recoil;
       SXA_RMOD.yaw = TU.recoil.rifleYaw * m.yaw;
       SXA_RMOD.spread = m.spread;
@@ -2900,13 +3017,33 @@ function SXA_buildArsenal(G, rifle) {
   }
   wrapPlayerDamage();
   function curZoom() { var g = cur(); return g.attMods ? g.attMods.zoom : 1; }
-  var scopeEl = null, sway = { a: 0, b: 0 };
+  var scopeEl = null, acogEl = null, sway = { a: 0, b: 0 };
   function updateScope(dt) {
     var g = cur(), z = curZoom(), P = G.player;
     var fov = z >= 2 ? 2 * Math.atan(Math.tan(37 * Math.PI / 180) / z) * 180 / Math.PI : 52;
     Mt.fovAds = fov;
     Mt.adsLook = 0.6 * Math.tan(fov * Math.PI / 360) / Math.tan(26 * Math.PI / 180);
-    var scoped = z >= 4 && g.ads > 0.88 && !L.sw && !L.heal;
+    // the PAC-9's 4x scope has its own view (.sx-acog), not the sniper's
+    var acog = L.cur === 'rifle' && S4.on && z >= 4 && g.ads > 0.88 && !L.sw && !L.heal;
+    var scoped = z >= 4 && g.ads > 0.88 && !L.sw && !L.heal && !acog;
+    if (!acogEl && acog) {
+      var h2 = hud();
+      if (h2 && h2.root) {
+        acogEl = document.createElement('div');
+        acogEl.className = 'sx-acog';
+        // red chevron, the bullet-drop post with its stadia ticks (SVG units: the window is 200 across)
+        acogEl.innerHTML = '<div class="sx-acog-ret"><svg viewBox="-100 -100 200 200" aria-hidden="true">' +
+          '<path class="chev" d="M0,-1.6 L-6.4,8 L-4.6,8 L0,1.4 L4.6,8 L6.4,8 Z"/>' +
+          '<rect class="post" x="-0.45" y="11" width="0.9" height="58"/>' +
+          '<rect class="post" x="-5.5" y="22" width="11" height="0.8"/><rect class="post" x="-4" y="33" width="8" height="0.8"/>' +
+          '<rect class="post" x="-2.8" y="44" width="5.6" height="0.8"/><rect class="post" x="-1.8" y="55" width="3.6" height="0.8"/>' +
+          '<rect class="post" x="-96" y="-0.35" width="72" height="0.7"/><rect class="post" x="24" y="-0.35" width="72" height="0.7"/>' +
+          '</svg></div>';
+        h2.root.appendChild(acogEl);
+      }
+    }
+    if (acogEl && acogEl._on !== acog) { acogEl._on = acog; acogEl.classList.toggle('on', acog); }
+    if (acog) g.root.position.y -= 3; // (the gun is out of the way: the window is the scope)
     if (!scopeEl) {
       var h = hud();
       if (h && h.root) {
@@ -2917,9 +3054,9 @@ function SXA_buildArsenal(G, rifle) {
       }
     }
     if (scopeEl && scopeEl._on !== scoped) { scopeEl._on = scoped; scopeEl.classList.toggle('on', scoped); scopeEl.classList.toggle('x8', z >= 8); }
-    if (scoped) {
-      g.root.position.y -= 3;
-      var t = G.time ? G.time.t : 0, k = (P && P.crouching ? 0.35 : 1) * (z >= 8 ? 1 : 0.6);
+    if (scoped || acog) {
+      if (scoped) g.root.position.y -= 3;
+      var t = G.time ? G.time.t : 0, k = (P && P.crouching ? 0.35 : 1) * (z >= 8 ? 1 : acog ? 0.45 : 0.6);
       var a = Math.sin(t * 0.83) * 0.0018 * k + Math.sin(t * 2.1) * 0.0004 * k, b = Math.sin(t * 1.27 + 1) * 0.0013 * k;
       if (P) { P.yaw += a - sway.a; P.pitch += b - sway.b; }
       sway.a = a; sway.b = b;
@@ -3470,6 +3607,7 @@ function SXA_buildArsenal(G, rifle) {
         if (BP.open) setBag(false);
         updateLabels(dt);
         if (scopeEl && scopeEl._on) { scopeEl._on = false; scopeEl.classList.remove('on'); }
+        if (acogEl && acogEl._on) { acogEl._on = false; acogEl.classList.remove('on'); }
         updateNades(dt);
         updatePickups(dt);
         return;
