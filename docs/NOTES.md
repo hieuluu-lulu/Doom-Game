@@ -287,6 +287,8 @@ Khối va chạm của map vừa dùng để chặn người đi vừa chặn đ
   - Mesh `slug` (viên đạn rời đi kèm model) bị bỏ.
   - Tay phải nắm tay cầm pistol grip, tay trái nắm ốp pump và đi theo pump.
 - **Ngắm (ADS):** nhìn dọc thân súng tới đầu ruồi ở mũi nòng (`beadY`). Shotgun không gắn ống ngắm nào (kể cả red dot/holo), chỉ ngắm bằng đầu ruồi; băng mở rộng là đoạn nối dài ống tiếp đạn, gắn ở đầu ống (`magZ`, `magY`).
+- **Độ sáng:** texture màu của model rất tối (trung bình 30/255) và độ kim loại cao, nên dưới ánh sáng game súng gần như đen. `SXA_TUNE.shotgunModel.look` nhân màu lên (`bright` 2,4) và hạ độ kim loại (`metal` 0,5), súng thành màu thép xám xanh.
+- **Chữ khắc trên súng:** hai mặt phẳng bên hông hộp khoá nòng có chữ "KR-12 BREAKWATER" và dòng nhỏ "12 GA · PUMP · DOOMZONE ARMS", vẽ bằng canvas (font Big Shoulders của HUD) lên một tấm mỏng. Bên trái đọc từ nòng về báng, bên phải đọc ngược lại, nên không bị lật. Có cả trên súng cầm tay lẫn súng nằm đất. Chỉnh chữ, vị trí, cỡ ở `SXA_TUNE.shotgunModel.engrave` (`SXA_engrave` trong `arsenal/arsenal.js`).
 - **Súng trên đất (để nhặt):** cũng dùng model này.
 - **Chỉnh vị trí:** `SXA_TUNE.shotgunModel`: số đo của model (`boreY`, `triggerZ`, `muzzleZ`, `rearZ`, `beadY`, `magZ/magY`, `forendZ/forendY`, `gripZ/gripY`, `ejectZ`) và vị trí cầm hông, độ xa khi ngắm, hành trình pump, chỉnh tay trái/phải.
 - **Dự phòng:** nếu model không tải được (quá 8 giây hoặc lỗi), game dùng lại khẩu KR-12 dựng bằng khối như cũ.

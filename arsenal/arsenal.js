@@ -85,6 +85,13 @@ var SXA_TUNE = {
     magZ: 112, magY: 9.05, forendZ: 66, forendY: 9.5, gripZ: -2, gripY: -3, ejectZ: 40,
     oz: 0, hip: [0.112, -0.112, -0.27], adsZ: -0.12, pumpTravel: 0.085,
     left: [0, 0, 0], right: [0, 0, 0], rightRot: [0, 0, 0],
+    // the model's own colour map is near black (~0.12) and its metal map high,
+    // so under the game's light the gun read as a black shape: bright scales
+    // the colour, metal / rough are the factors on its metal / roughness maps
+    look: { bright: 2.4, metal: 0.5, rough: 1.0 },
+    // the roll mark on both flat sides of the receiver (gun frame, m): centre
+    // z / y, size w × h, x = the side's distance from the bore line
+    engrave: { text: 'KR-12 BREAKWATER', sub: '12 GA \u00b7 PUMP \u00b7 DOOMZONE ARMS', z: -0.05, y: -0.0185, w: 0.19, h: 0.03, x: 0.0182 },
   },
   pistol: {
     name: 'M7 Tern', short: 'M7', mag: 12, reserve: 48, maxReserve: 120,
@@ -373,6 +380,44 @@ async function SXA_loadShotgunModel() {
   if (!geos.Body || !geos.Grip || !mat) throw new Error('shotgun meshes missing');
   [mat.map, mat.normalMap, mat.roughnessMap, mat.metalnessMap].forEach(function (t) { if (t) { t.anisotropy = 8; t.needsUpdate = true; } });
   mat.name = 'sxa_kr12';
+  var LK = T.look || {};
+  if (LK.bright) mat.color.setScalar(LK.bright);
+  if (LK.metal != null) mat.metalness = LK.metal;
+  if (LK.rough != null) mat.roughness = LK.rough;
+  // the roll mark uses the HUD's font: wait for it a moment (else a fallback face)
+  try { if (document.fonts && document.fonts.load) await Promise.race([document.fonts.load('700 40px "Big Shoulders Display"'), new Promise(function (r) { setTimeout(r, 1500); })]); } catch (e) { }
+  return { geos: geos, mat: mat, engrave: SXA_engrave(T.engrave) };
+}
+// a roll mark: the text drawn on a canvas, on a thin plane on each flat side of
+// the receiver (left side reads muzzle → stock, the right side the other way)
+function SXA_engrave(E) {
+  if (!E || typeof document === 'undefined') return null;
+  var W = 1024, H = Math.round(W * E.h / E.w), cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  var c = cv.getContext('2d'), big = Math.round(H * 0.5), small = Math.round(H * 0.27);
+  var draw = function (txt, size, y) {
+    c.font = '700 ' + size + 'px "Big Shoulders Display", "Arial Narrow", Arial, sans-serif';
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    var sp = size * 0.12, x = W * 0.03;
+    // cut into the steel: a dark edge over a bright floor
+    for (var pass = 0; pass < 2; pass++) {
+      c.fillStyle = pass ? 'rgba(214,219,224,0.95)' : 'rgba(8,9,10,0.85)';
+      var xx = x + (pass ? 0 : -2), yy = y + (pass ? 0 : -2);
+      for (var k = 0; k < txt.length; k++) { c.fillText(txt[k], xx, yy); xx += c.measureText(txt[k]).width + sp; }
+    }
+  };
+  draw(E.text, big, H * 0.34);
+  if (E.sub) draw(E.sub, small, H * 0.8);
+  var tex = new lt.CanvasTexture(cv);
+  tex.colorSpace = lt.SRGBColorSpace; tex.anisotropy = 8;
+  var mat = new lt.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.2, depthWrite: false, metalness: 0.55, roughness: 0.38, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  mat.name = 'sxa_kr12_mark';
+  var geos = [-1, 1].map(function (side) {
+    var g = new lt.PlaneGeometry(E.w, E.h);
+    g.rotateY(side * Math.PI / 2); // left (-x) plane faces -x, right faces +x
+    g.translate(side * E.x, E.y, E.z);
+    return g;
+  });
   return { geos: geos, mat: mat };
 }
 function SXA_shotgunGeoModel(M) {
@@ -391,6 +436,7 @@ function SXA_shotgunGeoModel(M) {
       pump: [g.Grip],
       trigger: g.Trigger ? [g.Trigger] : [],
       length: [z(TM.muzzleZ), z(TM.rearZ)],
+      marks: M.engrave,
     },
     muzzle: [0, BY, z(TM.muzzleZ)], eject: [0.016, BY + 0.006, z(TM.ejectZ)], sightY: line,
     hip: { p: TM.hip.slice(), r: [0.03, 0.08, -0.03] },
@@ -828,6 +874,7 @@ function SXA_makeGun(G, kind, geo, mats, hands, rng) {
       list.forEach(function (gg) { var m = SXA_vmMesh(gg, geo.model.mat); m.position.fromArray(geo.model.offset); group.add(m); });
     };
     addModel(root, geo.model.body);
+    if (geo.model.marks) geo.model.marks.geos.forEach(function (gg) { var m = SXA_vmMesh(gg, geo.model.marks.mat); m.position.fromArray(geo.model.offset); m.renderOrder = 2; root.add(m); });
     addModel(trigger, geo.model.trigger);
     addModel(mover, geo.model.pump);
   } else {
@@ -1382,6 +1429,7 @@ function SXA_worldKit(G, shotgunGeo, viewMats, sniperGeo) {
       src.model.body.concat(src.model.pump, src.model.trigger).forEach(function (gg) {
         var m = mesh(gg, src.model.mat); m.position.fromArray(src.model.offset); g.add(m);
       });
+      if (src.model.marks) src.model.marks.geos.forEach(function (gg) { var m = mesh(gg, src.model.marks.mat); m.position.fromArray(src.model.offset); m.castShadow = false; g.add(m); });
       var hm = new lt.Group();
       hm.add(g);
       g.rotation.set(0, Math.PI / 2, 0);
