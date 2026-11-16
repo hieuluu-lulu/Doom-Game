@@ -91,6 +91,12 @@ var SXA_TUNE = {
     look: { bright: 2.4, metal: 0.5, rough: 1.0 },
     // the roll mark on both flat sides of the receiver (gun frame, m): centre
     // z / y, size w × h, x = the side's distance from the bore line
+    // reloading, a shell at a time: the left hand leaves the pump, takes a shell
+    // (the model's own "slug" mesh) up into the loading port under the receiver
+    // and pushes it in (at 0.27 s of each shellEach). port: nudge of the port
+    // point (m); pick: where the hand fetches the next shell, from the port;
+    // entry: where the push starts; push: how far the shell slides in
+    load: { port: [0, 0, 0], pick: [-0.05, -0.1, 0.07], entry: [-0.004, -0.018, 0.04], push: [0, 0.006, -0.03], shellScale: 1 },
     engrave: { text: 'KR-12 BREAKWATER', sub: '12 GA \u00b7 PUMP \u00b7 DOOMZONE ARMS', z: -0.05, y: -0.0185, w: 0.19, h: 0.03, x: 0.0182 },
   },
   pistol: {
@@ -367,11 +373,14 @@ async function SXA_loadShotgunModel() {
   var gltf = await SX_parseGLB(SX_ASSET_shotgun), T = SXA_TUNE.shotgunModel, k = T.s;
   // model → gun frame: turned round (muzzle onto -z), metres, the origin on the bore at the trigger
   var M = new lt.Matrix4().makeRotationY(Math.PI).multiply(new lt.Matrix4().makeScale(k, k, k)).multiply(new lt.Matrix4().makeTranslation(0, -T.boreY, -T.triggerZ));
-  var groups = { Body: [], Grip: [], Trigger: [] }, mat = null;
+  var groups = { Body: [], Grip: [], Trigger: [] }, mat = null, port = null, shell = null;
   SXA_bakeScene(gltf.scene).forEach(function (p) {
-    var key = /^pump/i.test(p.name) ? 'Grip' : /^trigger/i.test(p.name) ? 'Trigger' : /^slug/i.test(p.name) ? null : 'Body';
-    if (!key) return;
     p.geo.applyMatrix4(M);
+    // the loose shell: the one the left hand feeds in on a reload
+    if (/^slug/i.test(p.name)) { shell = p.geo; return; }
+    // the loading gate: the port under the receiver (its bottom middle)
+    if (/^loader/i.test(p.name)) { var bx = new lt.Box3().setFromBufferAttribute(p.geo.attributes.position); port = [(bx.min.x + bx.max.x) / 2, bx.min.y, (bx.min.z + bx.max.z) / 2]; }
+    var key = /^pump/i.test(p.name) ? 'Grip' : /^trigger/i.test(p.name) ? 'Trigger' : 'Body';
     groups[key].push(p.geo);
     mat = mat || p.mat;
   });
@@ -386,7 +395,15 @@ async function SXA_loadShotgunModel() {
   if (LK.rough != null) mat.roughness = LK.rough;
   // the roll mark uses the HUD's font: wait for it a moment (else a fallback face)
   try { if (document.fonts && document.fonts.load) await Promise.race([document.fonts.load('700 40px "Big Shoulders Display"'), new Promise(function (r) { setTimeout(r, 1500); })]); } catch (e) { }
-  return { geos: geos, mat: mat, engrave: SXA_engrave(T.engrave) };
+  // the shell: centred, its long axis along z (the way it slides into the tube)
+  if (shell) {
+    shell.computeBoundingBox();
+    var sb = shell.boundingBox, sz = new lt.Vector3(), sc = new lt.Vector3();
+    sb.getSize(sz); sb.getCenter(sc);
+    shell.translate(-sc.x, -sc.y, -sc.z);
+    if (sz.x >= sz.y && sz.x >= sz.z) shell.rotateY(Math.PI / 2); else if (sz.y >= sz.x && sz.y >= sz.z) shell.rotateX(Math.PI / 2);
+  }
+  return { geos: geos, mat: mat, port: port, shell: shell, engrave: SXA_engrave(T.engrave) };
 }
 // a roll mark: the text drawn on a canvas, on a thin plane on each flat side of
 // the receiver (left side reads muzzle → stock, the right side the other way)
@@ -442,12 +459,20 @@ function SXA_shotgunGeoModel(M) {
     hip: { p: TM.hip.slice(), r: [0.03, 0.08, -0.03] },
     ads: { p: [0, -line, TM.adsZ], r: [0, 0, 0] },
     sprint: { p: [-0.035, 0.004, 0.03], r: [-0.04, 0.62, 0.26] },
-    reload: { p: [-0.02, 0.035, 0.02], r: [0.14, 0.12, 0.55] },
+    // reloading: rolled onto its right side and brought in, the loading port
+    // under the receiver turned toward the eye (the left hand feeds it: load)
+    reload: { p: [-0.07, 0.05, -0.02], r: [0.2, 0.4, -0.6] },
     // left glove onto the pump's forend (same relation to it as on the procedural KR-12)
     leftOffset: [TM.left[0], y(TM.forendY) + TM.left[1], z(TM.forendZ) + 0.236 + TM.left[2]],
     // right glove from the PAC-9's pistol grip onto this one's
     rightGrip: { from: [0, -0.1, 0.073], to: [TM.right[0], y(TM.gripY) + TM.right[1], z(TM.gripZ) + TM.right[2]], rot: TM.rightRot },
     pumpTravel: TM.pumpTravel,
+    // the shell-by-shell reload: the port and the forend grip point (root frame)
+    load: M.port ? {
+      port: [M.port[0] + TM.load.port[0], M.port[1] + BY + TM.load.port[1], M.port[2] + OZ + TM.load.port[2]],
+      forend: [0, y(TM.forendY), z(TM.forendZ)],
+      shell: M.shell, mat: M.mat, T: TM.load,
+    } : null,
   };
 }
 
@@ -940,6 +965,21 @@ function SXA_makeGun(G, kind, geo, mats, hands, rng) {
     lh.position.copy(lhBase);
     root.add(lh);
   }
+  // shell-by-shell reload (shotgun model): the hand's stops and the shell in it
+  var LD = null;
+  if (lh && geo.load && geo.load.shell) {
+    var LT = geo.load.T, v3 = function (a) { return new lt.Vector3().fromArray(a); };
+    var toPort = v3(geo.load.port).sub(v3(geo.load.forend));
+    LD = { port: v3(geo.load.port), hand: lhBase.clone().add(toPort) };
+    LD.pick = LD.hand.clone().add(v3(LT.pick));
+    LD.entry = LD.hand.clone().add(v3(LT.entry));
+    LD.push = v3(LT.push);
+    LD.shell = SXA_vmMesh(geo.load.shell, geo.load.mat);
+    LD.shell.scale.setScalar(LT.shellScale || 1);
+    LD.shell.visible = false;
+    root.add(LD.shell);
+    LD.tmp = new lt.Vector3();
+  }
   var flash = N_();
   flash.position.fromArray(geo.muzzle);
   flash.visible = false;
@@ -1113,6 +1153,33 @@ function SXA_makeGun(G, kind, geo, mats, hands, rng) {
     S.reloadW = S.reload ? inW : 0;
   }
 
+  // the left hand through a shell-by-shell reload (LD, the shotgun model):
+  // start: pump → under the port with a shell; each shell: up to the port, push
+  // it in (at 0.27 s, when the round counts), back down for the next; end:
+  // back onto the pump
+  function loadHand() {
+    var R = S.reload, sh = LD.shell, h = LD.tmp;
+    if (!R) { sh.visible = false; return; }
+    var show = false;
+    if (R.phase === 'start') {
+      h.copy(lh.position).lerp(LD.pick, Yo(Math.min(1, R.t / T.shellStart)));
+      show = R.t > T.shellStart * 0.45;
+    } else if (R.phase === 'shell') {
+      var ins = 0.27, a = ins * 0.62;
+      if (R.t < a) h.copy(LD.pick).lerp(LD.entry, Yo(R.t / a));
+      else if (R.t < ins) h.copy(LD.entry).lerp(LD.hand, Yo((R.t - a) / (ins - a)));
+      else h.copy(LD.hand).add(LD.push).lerp(LD.pick, Yo(Math.min(1, (R.t - ins) / Math.max(0.05, T.shellEach - ins - 0.04))));
+      show = !R.done;
+      // the push: the shell goes on into the tube for the last bit
+      if (show && R.t >= a) h.addScaledVector(LD.push, Yo((R.t - a) / (ins - a)));
+    } else {
+      h.copy(LD.pick).lerp(lhBase, Yo(Math.min(1, R.t / T.shellEnd)));
+    }
+    lh.position.copy(h);
+    sh.visible = show;
+    if (show) sh.position.copy(h).sub(LD.hand).add(LD.port);
+  }
+
   function pumpOffset(t) {
     if (t < 0.1) return 0;
     if (t < 0.23) return Yo((t - 0.1) / 0.13);
@@ -1162,6 +1229,7 @@ function SXA_makeGun(G, kind, geo, mats, hands, rng) {
       var travel = geo.pumpTravel || 0.075;
       mover.position.z = travel * po;
       if (lh) lh.position.set(lhBase.x, lhBase.y, lhBase.z + travel * po);
+      if (LD) loadHand();
     } else if (kind === 'sniper') {
       S.boltT = (S.boltT == null ? 9 : S.boltT) + dt
       S.boltF = S.boltF || {}
