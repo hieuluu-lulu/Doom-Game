@@ -25,6 +25,14 @@ var SXA_TUNE = {
   // the PAC-9 as a pickup (maps whose rooms start on the pistol, level.mpKit
   // 'pistol'): a full magazine + `pickup` rounds; when you have it, `crate` rounds
   rifle: { pickup: 60, crate: 60 },
+  // attachments on the map: scattered at random (around cover points, robot
+  // ground spawns and the map's pickup spots), base + perPlayer for every other
+  // player in the room (max), at least apart (m) from each other; a fresh
+  // layout every round (rooms: the same layout on every machine — seeded by the
+  // room code and the round). kinds: how likely each one is
+  // (x4Share of them, at least one, are always 4x scopes)
+  gear: { base: 8, perPlayer: 3, max: 32, apart: 4, x4Share: 0.2,
+    kinds: { x4: 3, reddot: 1.5, holo: 1.5, supp: 2, comp: 1.5, extmag: 2, grip: 1.5, stock: 1.5, x8: 1 } },
   // the PAC-9's 4x scope: an ACOG-style prism scope (arsenal/assets/scope4x.glb,
   // "4x Scope" by Monstr 3d, CC-BY-4.0) in place of the built-in red dot.
   // len: its length (m); z: its middle on the receiver (viewmodel z, the red
@@ -2311,12 +2319,35 @@ function SXA_buildArsenal(G, rifle) {
     // calibre boxes for the guns you find on the map
     if (objs[1]) add('ammo:12g', objs[1].pos, 2, 6, 8.8);
     if (objs[2]) add('ammo:338', objs[2].pos, 2, 6, 9.4);
-    var gear = ['att:x4', 'att:supp', 'att:extmag', 'att:grip', 'att:comp', 'att:reddot', 'att:holo', 'att:x8'];
-    for (var k = 0; k < gear.length; k++) {
-      var c = cover[(k * 7 + 3) % Math.max(1, cover.length)];
-      add(gear[k], c || (objs[k % Math.max(1, objs.length)] || {}).pos, 0.8, 3.5, k * 1.9 + 0.6);
+    // attachments: at random (gearCount of them), see SXA_TUNE.gear
+    var R = TU.gear, rnd = gearRng(), n = gearCount();
+    var centres = [].concat(cover, (lv.enemySpawns || []).filter(function (e) { return e.type === 'ground'; }).map(function (e) { return e.pos; }),
+      existing.map(function (s2) { return s2.pos.isVector3 ? s2.pos : new lt.Vector3(s2.pos[0], s2.pos[1], s2.pos[2]); }), objs.map(function (o) { return o.pos; }))
+      .filter(function (c2) { return c2 && isFinite(c2.x); });
+    var kinds = Object.keys(R.kinds).filter(function (k2) { return SXA_ATT[k2]; }), total = kinds.reduce(function (a2, k2) { return a2 + R.kinds[k2]; }, 0);
+    var pick = function () { var r2 = rnd() * total; for (var i2 = 0; i2 < kinds.length; i2++) { r2 -= R.kinds[kinds[i2]]; if (r2 <= 0) return kinds[i2]; } return kinds[0]; };
+    var placed = [], tries = 0;
+    while (placed.length < n && centres.length && tries++ < n * 12) {
+      var c = centres[Math.floor(rnd() * centres.length)], p = findSpot(c, 0.8, 3.5, rnd() * 6.283, taken);
+      if (!p || placed.some(function (q) { return q.distanceTo(p) < R.apart; })) continue;
+      taken.push(p); placed.push(p);
+      out.push({ kind: 'att:' + (placed.length <= Math.max(1, Math.round(n * R.x4Share)) && SXA_ATT.x4 ? 'x4' : pick()), pos: p });
     }
     return out;
+  }
+  // how many attachments: more players in the room, more of them
+  function gearCount() {
+    var R = TU.gear, n = 1;
+    try { if (window.SXN_MP && typeof SXN_playerCount === 'function') n = SXN_playerCount(); } catch (e) { }
+    return Math.min(R.max, R.base + R.perPlayer * Math.max(0, n - 1));
+  }
+  // the layout's dice: the same on every machine in a room (room code + round), fresh solo
+  function gearRng() {
+    var key = 'solo:' + Math.random();
+    try { if (window.SXN_MP && typeof SXN !== 'undefined' && SXN.code) key = SXN.code + ':' + ((SXN.score && SXN.score.round) || 0) + ':' + (SXN.score && SXN.score.blue ? (SXN.score.blue.rw | 0) + (SXN.score.red.rw | 0) : 0); } catch (e) { }
+    var h = 2166136261;
+    for (var i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return function () { h += 0x6D2B79F5; var t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
 
   // Rooms on a map with level.mpKit === 'pistol' (waterworks): everyone starts
@@ -2393,6 +2424,8 @@ function SXA_buildArsenal(G, rifle) {
     pickups = [];
     var lv = G.level || {};
     var spots = Array.isArray(lv.pickupSpots) && lv.pickupSpots.length ? lv.pickupSpots.slice() : autoSpots();
+    // attachments are scattered at random (gearSpots), not at the map's fixed spots
+    spots = spots.filter(function (s0) { return typeof s0.kind !== 'string' || s0.kind.indexOf('att:') !== 0; });
     if (!spots.some(function (s) { return SXA_MEDS[s.kind]; })) spots = spots.concat(medSpots(spots));
     spots = spots.concat(gearSpots(spots));
     if (!spots.some(function (s) { return SXA_ARMOR[s.kind]; })) spots = spots.concat(armorSpots(spots));

@@ -15,6 +15,7 @@ python3 -I build.py --features arsenal --out /tmp/t.html   # build thử riêng 
 |---|---|
 | `game/shell.html` | Khung trang; `/*@@CSS@@*/` và `//@@JS@@` là chỗ build chèn CSS và code. |
 | `game/style.css` | CSS của game gốc. |
+| `game/favicon/` | Biểu tượng tab và màn hình chính (`doomzone-32/64/180.png`: chữ DOOM cam trên ZONE trắng, font logo Big Shoulders Display, nền tối). Build nhúng thẳng vào `<head>` chỗ `<!--@@ICON@@-->` trong `game/shell.html`. Vẽ lại bằng `node tools/favicon.cjs game/favicon`. |
 | `game/js/00_three.js` | Engine three.js r180 (như game gốc đóng gói). |
 | `game/js/10_game.js` | Code game gốc: level, người chơi, súng, robot, nhiệm vụ, HUD, menu, âm thanh. Các bản vá cũ và tên "DoomZone" đã được sửa thẳng vào đây. |
 | `game/js/90_boot.js` | Hàm khởi động `QC()`. |
@@ -389,7 +390,7 @@ Map đấu đội nhỏ, bố cục tự thiết kế (không chép map nào c�
   - **Súng trên map không mất đi khi nhặt** (mọi map khi chơi nhiều người; mỗi người có bộ đồ nhặt riêng): chưa có loại súng đó thì nhặt được súng; đang có rồi thì không nhặt súng nữa, chỉ lấy đạn như trước (PAC-9 +60 viên 5.56, shotgun/súng tỉa một hộp). Sau mỗi lần lấy, chỗ đó 90 giây sau mới cho đạn lại (`p.ammoT`). Chết hồi sinh, mất súng, thì nhặt lại súng được ngay. Chơi một mình vẫn như cũ (nhặt xong súng biến mất, 90 giây sau mới có lại).
   - Game chưa có súng máy và tiểu liên; chỗ "súng máy ở mép nước" đặt một khẩu PAC-9.
 - **Khu tiếp tế trong khu hồi sinh:** nhìn ra phía địch thì **bên trái là khu ĐẠN** (vạch vàng, biển AMMO, kệ hòm đạn: 2 thùng đạn, thùng lựu đạn, hộp 5.56, hộp 12 GA), **bên phải là khu GIÁP · MÁU** (vạch xanh, biển ARMOUR · MEDICAL: áo giáp, mũ, túi cứu thương, túi nhỏ). Blue: đạn phía bắc, giáp phía nam; Red ngược lại.
-- **Đồ nhặt khác:** túi máu lớn dưới cầu thép, phụ kiện rải ở hành lang, mép bể, sảnh bơm.
+- **Đồ nhặt khác:** túi máu lớn dưới cầu thép; phụ kiện rải ngẫu nhiên khắp map (xem "Phụ kiện" ở phần súng).
 - **Chi tiết:** tường bê tông đổ ván khuôn (đường ghép ván, lỗ ty), rêu và vệt bẩn chân tường, vệt rỉ dưới mép tường; hàng rào lưới + dây thép gai trên đỉnh tường bao; sàn có đường cắt mỗi 3 m, rãnh thoát nước có nắp lưới, nắp cống, vết dầu; đáy bể có vệt rong ở mép nước và bùn ở đáy, mặt nước có váng trôi; bồn lắng có mối hàn, cửa người chui, ống nhánh có van, thước đo mực nước, cầu gạt bùn và bộ truyền động trên nóc; khung thép có giằng chéo, đèn pha treo, móc cẩu; hành lang có máng cáp, tủ vòi chữa cháy, van tay, đèn có lồng bảo vệ, số khoang B-01…B-08; sảnh bơm có ốp chân tường, vì kèo thật, khung ô kính, máy bơm có bệ thép, khớp nối, đồng hồ áp, van tay, ống luồn dây, tủ điện MCC có biển điện áp, cửa cuốn. Phần chi tiết chỉ để nhìn, không thêm vật cản.
 - **Chơi một mình:** cắt 3 relay (trong hành lang, giữa bể phía bắc bồn, trong sảnh bơm) rồi tới xe EVAC ở khu phía đông. Robot xuất hiện ở hành lang, mép bể, sảnh bơm và khu phía đông.
 - **Free-for-all:** 14 điểm xuất phát (hai khu hồi sinh, hành lang, góc mép bể, góc sảnh bơm).
@@ -662,7 +663,9 @@ Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình
 
   - Các món giảm giật cộng dồn: test PAC-9 bắn liên tục 1 giây, nòng nảy 4,7° khi không có gì; báng 4,0°; báng + tay cầm 3,3°; báng + tay cầm + bù giật 2,3° (giảm khoảng một nửa).
   - Báng súng không có hình trên súng (phần báng nằm sau camera, gần như không thấy ở góc nhìn thứ nhất); HUD súng hiện chữ STK.
-  - Có sẵn ở Camp Mirage (báng, băng mở rộng, bù giật, tay cầm, ống 4x) và Fuel Depot; lính robot cũng có thể rơi ra.
+  - **Rải ngẫu nhiên trên map** (mọi map; chỉnh ở `SXA_TUNE.gear`): quanh các chỗ ẩn nấp, điểm robot xuất hiện và chỗ đặt đồ, mỗi món cách nhau ít nhất 4 m, không nằm trong vật cản (không rải dưới nước). Số lượng: 8 món khi chơi một mình, mỗi người thêm vào phòng có thêm 3 món, tối đa 32 (phòng 3 người: 14). Khoảng 1/5 số món luôn là ống 4x (ít nhất 1), còn lại chọn ngẫu nhiên theo tỉ lệ (4x, giảm thanh, băng mở rộng nhiều hơn; 8x ít hơn).
+    - Mỗi ván rải lại chỗ mới. Trong phòng, mọi máy thấy cùng một bố trí (tính từ mã phòng và số ván); chơi một mình thì mỗi lần một khác.
+    - Các vị trí phụ kiện cố định cũ của map được bỏ, thay bằng các món ngẫu nhiên. Cứ điểm ở Dust Basin (Camp Mirage, Fuel Depot) vẫn có đồ riêng; lính robot cũng có thể rơi ra.
 
 - **Túi phụ kiện:**
   - Mỗi loại phụ kiện mang dự phòng tối đa 3 cái (`SXA_TUNE.spareMax`). Túi đầy thì phụ kiện bị thay rơi xuống cạnh bạn như trước.

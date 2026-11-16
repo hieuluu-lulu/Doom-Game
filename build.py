@@ -1,6 +1,8 @@
 """Build DoomZone into one self-contained HTML file.
 
 Project layout
+  game/favicon/     the tab / home-screen icons (doomzone-32/64/180.png, made by
+                    tools/favicon.cjs), inlined where <!--@@ICON@@--> sits
   game/shell.html   the page skeleton; /*@@CSS@@*/ and //@@JS@@ mark where the
                     styles and the script go
   game/style.css    the game's own styles
@@ -119,7 +121,23 @@ def build(features, do_min):
         js = minify(js)
     if shell.count('/*@@CSS@@*/') != 1 or shell.count('//@@JS@@') != 1:
         raise SystemExit('game/shell.html must hold one /*@@CSS@@*/ and one //@@JS@@')
-    return shell.replace('/*@@CSS@@*/', '\n'.join(css)).replace('//@@JS@@', js)
+    return icons(shell).replace('/*@@CSS@@*/', '\n'.join(css)).replace('//@@JS@@', js)
+
+
+# the favicons as data: URIs, so the one file needs nothing beside it
+def icons(shell):
+    if '<!--@@ICON@@-->' not in shell:
+        return shell
+    d = os.path.join(GAME, 'favicon')
+    links = []
+    for n, rel in ((32, 'icon'), (64, 'icon'), (180, 'apple-touch-icon')):
+        fn = os.path.join(d, f'doomzone-{n}.png')
+        if not os.path.exists(fn):
+            continue
+        b64 = base64.b64encode(open(fn, 'rb').read()).decode('ascii')
+        size = '' if rel == 'apple-touch-icon' else f' type="image/png" sizes="{n}x{n}"'
+        links.append(f'<link rel="{rel}"{size} href="data:image/png;base64,{b64}">')
+    return shell.replace('<!--@@ICON@@-->', '\n'.join(links))
 
 
 def main(argv):
