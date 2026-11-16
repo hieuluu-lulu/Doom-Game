@@ -1,0 +1,32 @@
+/* Board prompt (vehicles) */
+.sx-vprompt { position: absolute; left: 50%; bottom: calc(31% + var(--sab)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 7px 12px 7px 8px; background: var(--plate); border: 1px solid var(--line); opacity: 0; transition: opacity .15s; pointer-events: none; }
+.sx-vprompt.on { opacity: 1; }
+.sx-vprompt .h-key { position: static; transform: none; min-width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--signal); color: var(--signal); font: 700 12px/1 var(--f-mono); }
+.sx-vp-t { font: 600 12px/1 var(--f-label); letter-spacing: .22em; text-transform: uppercase; color: var(--bone); }
+
+/* Vehicle HUD replaces the ammo block while piloting */
+.sx-piloting .h-ammo, .sx-piloting .sx-load { display: none; }
+.sx-vhud { position: absolute; right: var(--gr); bottom: calc(22px + var(--sab)); min-width: 220px; text-align: right; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.sx-vhud.on { opacity: 1; }
+.sx-vh-name { font: 700 30px/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--bone); }
+.sx-vh-bar { height: 6px; margin: 8px 0 5px; background: var(--bone-faint); }
+.sx-vh-bar i { display: block; height: 100%; width: 100%; margin-left: auto; background: var(--signal); transition: width .15s; }
+.sx-vhud.crit .sx-vh-bar i { background: var(--alarm); }
+.sx-vh-hp { font: 500 12px/1.4 var(--f-mono); color: var(--bone-dim); letter-spacing: .08em; }
+.sx-vh-lines { white-space: pre; font: 600 11px/1.6 var(--f-label); letter-spacing: .2em; text-transform: uppercase; color: var(--bone-dim); margin-top: 4px; }
+.is-touch .sx-vhud { bottom: auto; top: calc(78px + var(--sat)); }
+
+/* Boss bar under the compass */
+.sx-boss { position: absolute; left: 50%; top: calc(98px + var(--sat)); width: min(420px, 60vw); transform: translateX(-50%); opacity: 0; transition: opacity .3s; pointer-events: none; text-align: center; }
+.sx-boss.on { opacity: 1; }
+.sx-boss-name { font: 700 11px/1 var(--f-label); letter-spacing: .32em; text-transform: uppercase; color: var(--alarm); margin-bottom: 6px; }
+.sx-boss-bar { height: 5px; background: rgba(255, 90, 64, .18); border: 1px solid rgba(255, 90, 64, .45); }
+.sx-boss-bar i { display: block; height: 100%; width: 100%; background: var(--alarm); transition: width .12s; }
+
+/* Markers over parked ally vehicles */
+.sx-vmarks { position: absolute; inset: 0; pointer-events: none; }
+.sx-vmark { position: absolute; left: 0; top: 0; display: none; flex-direction: column; align-items: center; gap: 2px; margin: -10px 0 0 -40px; width: 80px; }
+.sx-vmark.on { display: flex; }
+.sx-vmark i { width: 9px; height: 9px; border: 1.5px solid #7fd6ff; transform: rotate(45deg); }
+.sx-vmark b { font: 700 10px/1 var(--f-label); letter-spacing: .22em; text-transform: uppercase; color: #7fd6ff; }
+.sx-vmark span { font: 500 10px/1 var(--f-mono); color: var(--bone-dim); }

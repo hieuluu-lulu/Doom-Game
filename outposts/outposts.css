@@ -1,0 +1,9 @@
+/* Outpost markers (desert) */
+.sxo-marks { position: absolute; inset: 0; pointer-events: none; }
+.sxo-mark { position: absolute; left: 0; top: 0; display: none; flex-direction: column; align-items: center; gap: 3px; margin: -12px 0 0 -70px; width: 140px; }
+.sxo-mark.on { display: flex; }
+.sxo-mark i { width: 11px; height: 11px; border: 2px solid #7fd6ff; transform: rotate(45deg); }
+.sxo-mark b { font: 700 10px/1 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: #7fd6ff; text-shadow: 0 0 4px rgba(0, 0, 0, .6); white-space: nowrap; }
+.sxo-mark span { font: 500 10px/1 var(--f-mono); color: var(--bone-dim); text-shadow: 0 0 3px rgba(0, 0, 0, .7); white-space: nowrap; }
+.sxo-mark.hostile i { border-color: var(--alarm); }
+.sxo-mark.hostile b { color: var(--alarm); }

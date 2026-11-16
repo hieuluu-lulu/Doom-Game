@@ -1,0 +1,7 @@
+# raw downloaded models (sources, not needed to build: the optimised copies
+# live in each feature's assets/); some are too big for GitHub
+models/
+# tools: npm install in tools/ restores them
+tools/node_modules/
+.DS_Store
+*.log

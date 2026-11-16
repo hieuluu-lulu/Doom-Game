@@ -1,0 +1,3 @@
+/* window vault prompt (crossroads.js CXR_vaultStep); the box is units.css .sx-vprompt */
+.cx-vault { bottom: calc(24% + var(--sab)); }
+.cx-vault .h-key { min-width: 54px; padding: 0 6px; }

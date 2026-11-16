@@ -1,0 +1,4 @@
+/* Touch: hold L / R to lean (above the move stick) */
+.t-leanl, .t-leanr { width: 44px; height: 44px; bottom: calc(232px + var(--sab, 0px)); font-size: 11px; letter-spacing: .08em; }
+.t-leanl { left: calc(20px + var(--sal, 0px)); }
+.t-leanr { left: calc(72px + var(--sal, 0px)); }

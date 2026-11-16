@@ -1,0 +1,27 @@
+/* Corner minimap (top-right) */
+.sxm-mini { position: absolute; top: calc(16px + var(--sat)); right: var(--gr); width: 176px; height: 176px; border: 1px solid rgba(232, 228, 218, .45); box-shadow: 0 0 0 1px rgba(11, 13, 15, .6), 0 4px 18px rgba(0, 0, 0, .35); background: rgba(11, 13, 15, .4); pointer-events: auto; cursor: pointer; }
+.sxm-mini canvas { width: 100%; height: 100%; display: block; }
+.sxm-n { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font: 700 10px/1 var(--f-label); color: var(--bone); text-shadow: 0 0 3px #000; letter-spacing: .1em; }
+.sxm-key { position: absolute; right: 4px; bottom: 4px; font: 600 9px/1 var(--f-mono); color: var(--bone-dim); background: rgba(11, 13, 15, .6); padding: 2px 4px; }
+.h-feed { top: max(31%, calc(214px + var(--sat))); }
+.is-touch .sxm-mini { width: 108px; height: 108px; right: auto; left: var(--gl); top: calc(212px + var(--sat)); }
+.is-touch .sxm-key { display: none; }
+
+/* Full map (M) */
+.sxm-full { position: absolute; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; background: rgba(5, 7, 9, .55); pointer-events: auto; }
+.sxm-full.on { display: flex; }
+.sxm-frame { position: relative; width: min(88vh, 88vw); height: min(88vh, 88vw); border: 1px solid rgba(232, 228, 218, .5); box-shadow: 0 10px 40px rgba(0, 0, 0, .55); background: #14181b; }
+.sxm-frame canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.sxm-title { position: absolute; left: 12px; top: 10px; font: 700 22px/1 var(--f-display); letter-spacing: .14em; text-transform: uppercase; color: var(--bone); text-shadow: 0 0 6px rgba(0, 0, 0, .8); pointer-events: none; }
+.sxm-help { position: absolute; right: 12px; bottom: 12px; font: 500 11px/1 var(--f-mono); color: var(--bone); background: rgba(11, 13, 15, .7); padding: 5px 8px; pointer-events: none; }
+.sxm-btn { position: absolute; right: 10px; width: 34px; height: 34px; border: 1px solid rgba(232, 228, 218, .5); background: rgba(11, 13, 15, .72); color: var(--bone); font: 600 18px/1 var(--f-label); cursor: pointer; padding: 0; }
+.sxm-close { top: 10px; }
+.sxm-zin { top: 52px; }
+.sxm-zout { top: 90px; }
+.sxm-btn:hover { border-color: var(--signal); color: var(--signal); }
+
+/* Waypoint in the 3D view */
+.sxm-wp { position: absolute; left: 0; top: 0; display: none; flex-direction: column; align-items: center; margin: -22px 0 0 -30px; width: 60px; pointer-events: none; }
+.sxm-wp.on { display: flex; }
+.sxm-wp i { width: 14px; height: 14px; background: #ffd84a; border: 2px solid rgba(11, 13, 15, .85); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+.sxm-wp span { margin-top: 4px; font: 600 10px/1 var(--f-mono); color: #ffd84a; text-shadow: 0 0 3px #000; }

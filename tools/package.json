@@ -1,0 +1,14 @@
+{
+  "name": "doomzone-tools",
+  "private": true,
+  "description": "Model optimisation scripts (gltf-transform) and esbuild for `build.py --min`",
+  "type": "module",
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "esbuild": "^0.24.0",
+    "meshoptimizer": "^0.22.0",
+    "sharp": "^0.33.5"
+  }
+}

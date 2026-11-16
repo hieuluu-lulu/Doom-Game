@@ -1,0 +1,1 @@
+.sxmenu-veil { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: #0b0d0f; color: var(--bone); font: 600 13px/1 var(--f-label); letter-spacing: .3em; text-transform: uppercase; }
