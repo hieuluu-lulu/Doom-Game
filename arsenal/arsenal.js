@@ -71,7 +71,18 @@ var SXA_TUNE = {
   // glove nudges (m), rightRot = extra glove rotation (rad)
   sniperModel: { s: 0.0065, boreY: 11.1, scopeY: 18.85, muzzleZ: 127.39, hip: [0.108, -0.105, -0.3], adsZ: -0.2,
     right: [0, 0, 0], rightRot: [0, 0, 0], left: [0, 0, -0.105] },
+  // the KR-12 = the "Shotgun" model (arsenal/assets/shotgun.glb, DJMaesen,
+  // CC-BY-4.0): a pistol-grip pump gun. Its own frame (model units, muzzle
+  // toward +z): s = m per unit (0.79 m overall); boreY / triggerZ = the bore
+  // height and the trigger (the gun's origin); muzzleZ / rearZ = its ends;
+  // beadY = the front bead's top (the eye line); magZ/magY = the magazine
+  // tube's cap (the extended-mag tube goes on there); forendZ/forendY = where
+  // the left hand holds the pump; gripZ/gripY = the pistol grip (right hand);
+  // ejectZ = the port. oz shifts the gun along z; hip / adsZ: the poses;
+  // left / right / rightRot: glove nudges (m, rad)
   shotgunModel: {
+    s: 0.0057, boreY: 14.15, triggerZ: 7.7, muzzleZ: 128.8, rearZ: -9.24, beadY: 19.6,
+    magZ: 112, magY: 9.05, forendZ: 66, forendY: 9.5, gripZ: -2, gripY: -3, ejectZ: 40,
     oz: 0, hip: [0.112, -0.112, -0.27], adsZ: -0.12, pumpTravel: 0.085,
     left: [0, 0, 0], right: [0, 0, 0], rightRot: [0, 0, 0],
   },
@@ -312,77 +323,84 @@ function SXA_shotgunGeo() {
 }
 
 // ---------------------------------------------------------------------------
-// KR-12 from the pump-shotgun model (models/pumpshotgun.fbx, converted to
-// assets/shotgun.glb: forward -Z, metres, 0.95 m long, origin = the trigger on
-// the bore axis). Meshes: Body, Barrel (+ magazine tube), BarrelHolder,
-// BarrelPump, StockWood, StockPlastic, Trigger, Triggerholder, SafetyLeft/Right,
-// EjectorBottom, Grip (= wooden forend + action bars: the pump), empty_shell.
-// Textures assets/shotgun_base.jpg + shotgun_normal.jpg; metalness / roughness
-// are derived from the base colour (grey = steel, brown = wood, black = rubber).
+// KR-12 from the "Shotgun" model (Sketchfab, DJMaesen, CC-BY-4.0; tools/
+// shotgun_opt.mjs → assets/shotgun.glb: 2048 WebP textures, meshopt). Meshes:
+// base (receiver, barrel, magazine tube, pistol grip), loader (loading gate),
+// pump (forend + action bars), trigger, slug (a loose shell: left out). Baked
+// into the gun's frame here (SXA_TUNE.shotgunModel): turned round so the
+// muzzle points down -z, in metres, the origin on the bore at the trigger.
+// Its own material (colour, metal/roughness and normal maps).
 // The procedural KR-12 (SXA_shotgunGeo) stays as the fallback.
 // ---------------------------------------------------------------------------
 var SXA_SGM = null;
-function SXA_metalRough(img) {
-  var n = 512, c = document.createElement('canvas');
-  c.width = c.height = n;
-  var x = c.getContext('2d', { willReadFrequently: true });
-  x.drawImage(img, 0, 0, n, n);
-  var d = x.getImageData(0, 0, n, n), a = d.data;
-  for (var i = 0; i < a.length; i += 4) {
-    var r = a[i], g = a[i + 1], b = a[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    var sat = mx ? (mx - mn) / mx : 0, lum = (r * 0.3 + g * 0.59 + b * 0.11) / 255;
-    // worn blued steel, not chrome: capped metalness, mid roughness
-    var metal = 0.62 * Zn((0.3 - sat) / 0.16, 0, 1) * Zn((lum - 0.07) / 0.12, 0, 1);
-    var rough = (metal / 0.62) * (0.46 + (1 - lum) * 0.22) + (1 - metal / 0.62) * 0.66;
-    a[i] = 0; a[i + 1] = rough * 255; a[i + 2] = metal * 255; a[i + 3] = 255;
-  }
-  x.putImageData(d, 0, 0);
-  var t = new lt.CanvasTexture(c);
-  t.colorSpace = lt.NoColorSpace;
-  return t;
+// every mesh of a glTF scene as float geometry (position / normal / uv) in the
+// scene's own space — quantised (meshopt) attributes come out as plain floats
+function SXA_bakeScene(scene) {
+  scene.updateMatrixWorld(true);
+  var inv = new lt.Matrix4().copy(scene.matrixWorld).invert(), out = [];
+  scene.traverse(function (o) {
+    if (!o.isMesh) return;
+    var src = o.geometry, g = new lt.BufferGeometry();
+    ['position', 'normal', 'uv'].forEach(function (name) {
+      var a = src.attributes[name];
+      if (!a) return;
+      var arr = new Float32Array(a.count * a.itemSize);
+      for (var i = 0; i < a.count; i++) for (var c = 0; c < a.itemSize; c++) arr[i * a.itemSize + c] = a.getComponent(i, c);
+      g.setAttribute(name, new lt.BufferAttribute(arr, a.itemSize));
+    });
+    if (src.index) g.setIndex(src.index.clone());
+    g.applyMatrix4(new lt.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    if (!g.attributes.normal) g.computeVertexNormals();
+    out.push({ geo: g, mat: o.material, name: o.name || '' });
+  });
+  return out;
 }
 async function SXA_loadShotgunModel() {
   if (typeof SX_ASSET_shotgun !== 'string' || typeof SX_parseGLB !== 'function') return null;
-  var res = await Promise.all([SX_parseGLB(SX_ASSET_shotgun), SX_image(SX_ASSET_shotgun_base, 'image/webp'), SX_image(SX_ASSET_shotgun_normal, 'image/webp')]);
+  var gltf = await SX_parseGLB(SX_ASSET_shotgun), T = SXA_TUNE.shotgunModel, k = T.s;
+  // model → gun frame: turned round (muzzle onto -z), metres, the origin on the bore at the trigger
+  var M = new lt.Matrix4().makeRotationY(Math.PI).multiply(new lt.Matrix4().makeScale(k, k, k)).multiply(new lt.Matrix4().makeTranslation(0, -T.boreY, -T.triggerZ));
+  var groups = { Body: [], Grip: [], Trigger: [] }, mat = null;
+  SXA_bakeScene(gltf.scene).forEach(function (p) {
+    var key = /^pump/i.test(p.name) ? 'Grip' : /^trigger/i.test(p.name) ? 'Trigger' : /^slug/i.test(p.name) ? null : 'Body';
+    if (!key) return;
+    p.geo.applyMatrix4(M);
+    groups[key].push(p.geo);
+    mat = mat || p.mat;
+  });
   var geos = {};
-  res[0].scene.traverse(function (o) { if (o.isMesh) geos[o.name] = o.geometry; });
-  if (!geos.Body || !geos.Grip || !geos.Barrel || !geos.StockWood) throw new Error('shotgun meshes missing');
-  var tex = function (img, srgb) {
-    var t = new lt.Texture(img);
-    t.colorSpace = srgb ? lt.SRGBColorSpace : lt.NoColorSpace;
-    t.anisotropy = 8;
-    t.needsUpdate = true;
-    return t;
-  };
-  var mr = SXA_metalRough(res[1]);
-  var mat = new lt.MeshStandardMaterial({ name: 'sxa_kr12', map: tex(res[1], true), normalMap: tex(res[2], false), metalnessMap: mr, roughnessMap: mr, metalness: 1, roughness: 1 });
+  for (var g in groups) if (groups[g].length) geos[g] = groups[g].length > 1 ? Ii(groups[g]) : groups[g][0];
+  if (!geos.Body || !geos.Grip || !mat) throw new Error('shotgun meshes missing');
+  [mat.map, mat.normalMap, mat.roughnessMap, mat.metalnessMap].forEach(function (t) { if (t) { t.anisotropy = 8; t.needsUpdate = true; } });
+  mat.name = 'sxa_kr12';
   return { geos: geos, mat: mat };
 }
 function SXA_shotgunGeoModel(M) {
   // the model sits in the viewmodel frame with its bore 8 mm above the root,
-  // like the procedural KR-12, so the hip / ADS framing stays the same
-  var BY = 0.008, OZ = SXA_TUNE.shotgunModel.oz, g = M.geos, TM = SXA_TUNE.shotgunModel;
-  var pick = function (names) { return names.filter(function (n) { return g[n]; }).map(function (n) { return g[n]; }); };
-  var line = BY + 0.0215; // eye line just over the front bead (bead top 18.5 mm above the bore)
-  SXA_MOUNTS.shotgun = { mag: { at: [0, BY - 0.034, -0.556 + OZ], tube: true }, grip: null }; // no optic slot
+  // like the procedural KR-12, so the hip / ADS framing stays the same; the
+  // points below come from the model's own measurements (SXA_TUNE.shotgunModel)
+  var BY = 0.008, TM = SXA_TUNE.shotgunModel, OZ = TM.oz, g = M.geos, k = TM.s;
+  var z = function (mz) { return -(mz - TM.triggerZ) * k + OZ; }, y = function (my) { return (my - TM.boreY) * k + BY; };
+  var line = y(TM.beadY) + 0.002; // eye line just over the front bead
+  SXA_MOUNTS.shotgun = { mag: { at: [0, y(TM.magY), z(TM.magZ)], tube: true }, grip: null }; // no optic slot
   return {
     parts: {},
     model: {
       mat: M.mat, offset: [0, BY, OZ],
-      body: pick(['Body', 'Barrel', 'BarrelHolder', 'BarrelPump', 'StockWood', 'StockPlastic', 'Triggerholder', 'SafetyLeft', 'SafetyRight', 'EjectorBottom']),
-      pump: pick(['Grip']),
-      trigger: pick(['Trigger']),
-      length: [-0.601 + OZ, 0.346 + OZ],
+      body: [g.Body],
+      pump: [g.Grip],
+      trigger: g.Trigger ? [g.Trigger] : [],
+      length: [z(TM.muzzleZ), z(TM.rearZ)],
     },
-    muzzle: [0, BY, -0.602 + OZ], eject: [0.016, BY + 0.006, -0.1 + OZ], sightY: line,
+    muzzle: [0, BY, z(TM.muzzleZ)], eject: [0.016, BY + 0.006, z(TM.ejectZ)], sightY: line,
     hip: { p: TM.hip.slice(), r: [0.03, 0.08, -0.03] },
     ads: { p: [0, -line, TM.adsZ], r: [0, 0, 0] },
     sprint: { p: [-0.035, 0.004, 0.03], r: [-0.04, 0.62, 0.26] },
     reload: { p: [-0.02, 0.035, 0.02], r: [0.14, 0.12, 0.55] },
-    // left glove onto the wooden forend (same relation as the old forend)
-    leftOffset: [TM.left[0], BY - 0.0266 + TM.left[1], -0.315 + OZ + 0.236 + TM.left[2]],
-    // right glove moved from the old pistol grip onto the stock's wrist
-    rightGrip: { from: [0, -0.1, 0.073], to: [TM.right[0], BY - 0.057 + TM.right[1], 0.08 + OZ + TM.right[2]], rot: TM.rightRot },
+    // left glove onto the pump's forend (same relation to it as on the procedural KR-12)
+    leftOffset: [TM.left[0], y(TM.forendY) + TM.left[1], z(TM.forendZ) + 0.236 + TM.left[2]],
+    // right glove from the PAC-9's pistol grip onto this one's
+    rightGrip: { from: [0, -0.1, 0.073], to: [TM.right[0], y(TM.gripY) + TM.right[1], z(TM.gripZ) + TM.right[2]], rot: TM.rightRot },
     pumpTravel: TM.pumpTravel,
   };
 }

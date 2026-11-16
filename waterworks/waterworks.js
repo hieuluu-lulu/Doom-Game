@@ -263,6 +263,9 @@ async function WW_level(i) {
       t.slab(plate, a, y - 0.05, zc - w / 2, b, y, zc + w / 2)
       t.slab(dark, a + 0.02, y - 0.12, zc - w / 2 + 0.03, b - 0.02, y - 0.05, zc + w / 2 - 0.03)
       t.col(a, y0, zc - w / 2, b, y, zc + w / 2, 'metal')
+      // the handrails: no stepping off the side (from the floor up to rail height)
+      t.col(a, y0, zc - w / 2 - 0.08, b, y + 1.0, zc - w / 2, 'metal')
+      t.col(a, y0, zc + w / 2, b, y + 1.0, zc + w / 2 + 0.08, 'metal')
     }
     var L = n * run, len = Math.hypot(L, top - y0), ang = Math.atan2(top - y0, L), mid = xBottom + (dir * L) / 2
     t.metalRects.push([Math.min(xBottom, xBottom + dir * L), zc - w / 2, Math.max(xBottom, xBottom + dir * L), zc + w / 2])
@@ -571,7 +574,7 @@ async function WW_level(i) {
   /* ---- south: the pump hall x[-17.8,17.8] z[11.2,23] ----------------------- */
   var HH = 5.5
   wallX(10.8, 11.2, -17.8, 17.8, HH, conc, [[-10, -7.5, 2.8], [-1.75, 1.75, 3.2], [7.5, 10, 2.8]], true)
-  t.slab(stain, -17.8, 0, 10.76, 17.8, 1.0, 10.8)
+  ;[[-17.8, -10], [-7.5, -1.75], [1.75, 7.5], [10, 17.8]].forEach(function (r) { t.slab(stain, r[0], 0, 10.76, r[1], 1.0, 10.8) })
   label('PUMP HALL', 0.6, 0, 4.2, 10.77, 'z-', 'white', 'stencil')
   label('PUMP HALL', 0.6, 0, 4.2, 11.23, 'z+', 'white', 'stencil')
   // roof: corrugated, three skylights; one collider (tag roof: off the minimap)
@@ -1154,6 +1157,7 @@ async function WW_level(i) {
     enemySpawns: enemySpawns,
     zones: zones,
     interiorBoxes: hallInside,
+    arena: { x0: WW_B.x0, x1: WW_B.x1, z0: WW_B.z0, z1: WW_B.z1 },
     cinematicPath: cinematicPath,
     coverPoints: coverPoints,
     skylights: [],

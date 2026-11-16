@@ -761,7 +761,7 @@ SXU_PLUGINS.push(function SXT_plugin(U, G) {
     for (var k = 0; k < n; k++) {
       if (!opts.garrison && alive(mission) >= cap) break
       var a = (k / Math.max(1, n)) * 6.28 + Math.random() * 0.8, r = 1.6 + Math.random() * 1.8
-      var p = U.spotOutside ? U.spotOutside(base.x + Math.sin(a) * r, base.z + Math.cos(a) * r, 0.5) : new V3(base.x + Math.sin(a) * r, 0, base.z + Math.cos(a) * r)
+      var p = U.spotOutside ? U.spotOutside(base.x + Math.sin(a) * r, base.z + Math.cos(a) * r, 0.5, base.y || 0) : new V3(base.x + Math.sin(a) * r, 0, base.z + Math.cos(a) * r)
       var u = U.spawn('trooper', {
         pos: p, yaw: F ? Math.atan2(-(F.x - p.x), -(F.z - p.z)) : 0,
         variant: opts.variant || variantFor(k, n), home: opts.home || p, guard: !!opts.garrison,

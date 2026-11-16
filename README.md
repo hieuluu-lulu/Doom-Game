@@ -212,6 +212,18 @@ Khối va chạm của map vừa dùng để chặn người đi vừa chặn đ
 - **Đo bằng 400–700 tia ngẫu nhiên, đếm tia bị chặn trước vật nhìn thấy gần nhất hơn 1,5 m:** Port 49 → 16, Dust Basin 56 → 40, Crossroads 23 → 19. Phần còn lại là các vật có khối va chạm lớn hơn hình (xe, máy bơm dầu, lan can…), cần sửa riêng từng chỗ.
 - Chỉnh số: `SXB_TUNE` trong `shots/shots.js`.
 
+### Đường đạn trúng người: đã kiểm tra
+
+- **Đạn của mình (bắn robot, bắn người chơi khác):** đạn bay từ mắt theo tâm màn hình. Đã đo:
+  - **Hitbox so với model:** lệch tối đa khoảng 6 cm, tâm lệch dưới 2 cm, kể cả khi người kia đang chạy, ở 8 / 25 / 40 m.
+  - **Ống ngắm:** red dot sẵn và 4x của PAC-9, điểm ruồi, red dot, holo của M7, đầu ruồi KR-12 đều nằm đúng tâm màn hình.
+  - **Độ toả là cố ý:** bắn hông, vừa chạy vừa bắn, đang nhảy thì đạn toả rộng hơn, và khe hở của tâm ngắm cho thấy độ toả đó.
+- **Robot bắn mình (lính, tháp súng, xe, máy bay, chó robot):** người chơi giờ là một khối viên nang như thân người (`SXU_PHIT` trong `units/units.js`: bán kính 0,34 m, cao 1,85 m, ngồi xuống còn 1,2 m, đầu đi theo mắt nên nghiêng người thì đầu ra khỏi đường đạn).
+  - Trước đây là ống tròn bán kính 0,42 m (chó robot 0,38 m), luôn cao 1,9 m kể cả khi ngồi, nên đạn sượt cách người 10 cm hoặc bay qua đầu lúc ngồi vẫn tính là trúng.
+- **Chơi nhiều người, vệt đạn của người khác:** vệt vẽ từ súng của họ tới đúng chỗ đường đạn thật dừng lại (tường, mình, hoặc người khác).
+  - Trước đây vệt chạy song song với đường đạn thật nhưng xuất phát từ nòng súng, nên lệch 20–30 cm: nhìn thì như bắn trượt mà mình vẫn mất máu.
+  - Người bắn vẫn thấy mình chậm khoảng 0,12 s (nội suy, `SXN_TUNE.interp`) cộng thêm độ trễ mạng. Vì vậy khi đang chạy ngang, có thể bị trúng ở chỗ vừa rời đi một chút.
+
 ## Nghiêng người (`view/`)
 
 - **Phím:** giữ Q để nghiêng trái, giữ E để nghiêng phải (giống PUBG). Trên điện thoại có nút L / R.
@@ -261,21 +273,20 @@ Khối va chạm của map vừa dùng để chặn người đi vừa chặn đ
 - **Chỉnh vị trí:** `SXA_TUNE.pistolModel` (độ cao lỗ nòng, vị trí cầm hông, độ xa khi ngắm, chỉnh tay).
 - **Dự phòng:** nếu model không tải được thì dùng lại khẩu M7 cũ.
 
-## Shotgun KR-12: model từ `pumpshotgun.fbx`
+## Shotgun KR-12: model "Shotgun" (DJMaesen)
 
-- **Nguồn:** `pumpshotgun.fbx` + texture trong `~/Downloads/free-animated-pump-shotgun/textures`.
-- **Chuyển đổi (làm một lần):** FBXLoader + GLTFExporter của three.js r180 đổi file FBX sang `arsenal/assets/shotgun.glb` (413 KB).
-  - Hướng: nòng theo trục -Z. Đơn vị mét, súng dài 0,95 m. Gốc toạ độ ở cò súng, nằm trên trục nòng.
-  - Bỏ mesh lửa đầu nòng vì game có hiệu ứng riêng.
-  - Đỉnh trùng được gộp lại cho nhẹ.
-- **Texture:** `shotgun_base.jpg` (2048 px) và `shotgun_normal.jpg` (1024 px). Model không có map kim loại/độ nhám, nên game tự sinh lúc tải từ màu: xám là thép, nâu là gỗ, đen là cao su.
+- **Nguồn:** model "Shotgun" trên Sketchfab của DJMaesen, giấy phép CC-BY-4.0 (ghi công trong `CREDITS.md`). Shotgun pump có báng súng ngắn kiểu pistol grip.
+- **Tối ưu (làm một lần):** `tools/shotgun_opt.mjs` (gltf-transform) bỏ phần thừa, gộp trùng, đổi texture sang WebP 2048 px, nén hình khối bằng meshopt → `arsenal/assets/shotgun.glb` (0,96 MB). Dùng: `node tools/shotgun_opt.mjs <vào.glb> <ra.glb>`.
+- **Đo model:** `tools/sg_profile.mjs` in mặt cắt của model (độ cao nòng, đầu ruồi, ống tiếp đạn, ốp pump, tay cầm) để lấy số đo cho `SXA_TUNE.shotgunModel`.
+- **Đưa vào game** (`SXA_loadShotgunModel` trong `arsenal/arsenal.js`): quay 180° cho nòng theo trục -Z, đổi sang mét (`s` = 0,0057 m mỗi đơn vị, súng dài khoảng 0,79 m), gốc toạ độ ở cò súng nằm trên trục nòng (`boreY`, `triggerZ`). Dùng vật liệu riêng của model (màu, kim loại/độ nhám, normal map).
 - **Phần chuyển động:**
-  - Mesh `Grip` (ốp gỗ + thanh trượt) là phần pump, trượt lùi 8,5 cm mỗi lần lên đạn.
-  - Mesh `Trigger` là cò, nhích khi bóp.
-  - Tay phải nắm cổ báng gỗ, tay trái nắm ốp gỗ và đi theo pump.
-- **Ngắm (ADS):** nhìn dọc hộp khoá nòng tới đầu ruồi ở mũi nòng. Shotgun không gắn ống ngắm nào (kể cả red dot/holo), chỉ ngắm bằng đầu ruồi; băng mở rộng là đoạn nối dài ống tiếp đạn.
+  - Mesh `pump` (ốp + thanh trượt) là phần pump, trượt lùi 8,5 cm mỗi lần lên đạn.
+  - Mesh `trigger` là cò, nhích khi bóp.
+  - Mesh `slug` (viên đạn rời đi kèm model) bị bỏ.
+  - Tay phải nắm tay cầm pistol grip, tay trái nắm ốp pump và đi theo pump.
+- **Ngắm (ADS):** nhìn dọc thân súng tới đầu ruồi ở mũi nòng (`beadY`). Shotgun không gắn ống ngắm nào (kể cả red dot/holo), chỉ ngắm bằng đầu ruồi; băng mở rộng là đoạn nối dài ống tiếp đạn, gắn ở đầu ống (`magZ`, `magY`).
 - **Súng trên đất (để nhặt):** cũng dùng model này.
-- **Chỉnh vị trí:** `SXA_TUNE.shotgunModel` (vị trí cầm hông, độ xa khi ngắm, hành trình pump, chỉnh tay trái/phải).
+- **Chỉnh vị trí:** `SXA_TUNE.shotgunModel`: số đo của model (`boreY`, `triggerZ`, `muzzleZ`, `rearZ`, `beadY`, `magZ/magY`, `forendZ/forendY`, `gripZ/gripY`, `ejectZ`) và vị trí cầm hông, độ xa khi ngắm, hành trình pump, chỉnh tay trái/phải.
 - **Dự phòng:** nếu model không tải được (quá 8 giây hoặc lỗi), game dùng lại khẩu KR-12 dựng bằng khối như cũ.
 
 ## arsenal (vũ khí, bom, nhặt đồ)
@@ -383,7 +394,7 @@ Map đấu đội nhỏ, bố cục tự thiết kế (không chép map nào c�
 - **Kích thước:** 50×46 m trong vòng tường bê tông rêu cao 7 m, chỉ đối xứng trái–phải, bắc là phía −z. Hai điểm xuất phát cách nhau 46 m; chạy từ cửa khu hồi sinh tới bể giữa mất khoảng 2 giây.
 - **Khu hồi sinh (Blue tây, Red đông):** sân dài có tường 4 m (không nhảy qua, không ném lựu đạn thẳng vào). Ba cửa: ra hành lang ống, ra mép bể, vào sảnh bơm. Trong cửa ra bể và cửa ra hành lang có tường chắn, người ngoài không nhìn hay bắn thẳng vào chỗ xuất phát. Dải sơn xanh/đỏ và chữ BLUE/RED để nhận ra phía mình.
 - **Phía bắc, hành lang ống (Gallery B):** rộng 7 m, dài 48 m từ đầu này tới đầu kia, là tuyến bắn tỉa dài nhất. Có dãy ống sát tường (núp ngồi), hai trạm van nhô ra từ tường trong, một khối bê tông thấp ở giữa. Dầm thép phía trên đổ bóng thành vạch trên sàn.
-- **Giữa, bể lắng:** trũng 0,5 m, dốc thoải 1,8 m ở mép, đáy có vài cm nước (bước chân và đạn bắn tóe nước). Giữa bể là bồn lắng (Clarifier 2) đặt trên bệ tròn 2 bậc, quanh bệ có 4 hộp van tạo góc ngồi núp. Phía bắc bể có 2 cụm ống thấp và ống dẫn lớn từ bồn sang tường hành lang. Một cầu thép cao 2,6 m chạy ngang bể phía nam bồn, cầu thang bậc thật ở hai đầu. Trên cao là khung thép lộ trời.
+- **Giữa, bể lắng:** trũng 0,5 m, dốc thoải 1,8 m ở mép, đáy có vài cm nước (bước chân và đạn bắn tóe nước). Giữa bể là bồn lắng (Clarifier 2) đặt trên bệ tròn 2 bậc, quanh bệ có 4 hộp van tạo góc ngồi núp. Phía bắc bể có 2 cụm ống thấp và ống dẫn lớn từ bồn sang tường hành lang. Một cầu thép cao 2,6 m chạy ngang bể phía nam bồn, cầu thang bậc thật ở hai đầu, hai bên cầu thang có lan can chặn (đi ngang trên bậc không rơi xuống, không bước lên cầu thang từ bên hông). Trên cao là khung thép lộ trời.
 - **Phía nam, sảnh bơm:** có mái, 3 ô kính lấy sáng, 3 máy bơm trên bệ, tủ điện dọc tường, đèn trần. Là đường đánh gần (2 shotgun đặt ở cửa hông). Cửa chính giữa có khối bê tông chắn phía ngoài.
 - **Chơi nhiều người: vào trận chỉ có dao và súng lục** (`mpKit: 'pistol'` trong dữ liệu level, xử lý ở `arsenal/arsenal.js`). Hồi sinh cũng về lại dao + súng lục và không còn đạn 5.56. Chơi một mình vẫn có súng trường như thường.
   - **Súng nhặt trên map** (đối xứng hai bên, súng của DoomZone): súng trường PAC-9 ngay trước chỗ xuất phát (lối giữa tường chắn và cửa), trong hành lang, trong sảnh bơm cạnh cửa hông và ở mép bắc của bể; súng tỉa ngay trong cửa ra hành lang; shotgun ở cửa hông sảnh bơm và ở góc mép bể. Nhặt PAC-9 được đầy băng + 60 viên.
@@ -393,9 +404,11 @@ Map đấu đội nhỏ, bố cục tự thiết kế (không chép map nào c�
 - **Đồ nhặt khác:** túi máu lớn dưới cầu thép; phụ kiện rải ngẫu nhiên khắp map (xem "Phụ kiện" ở phần súng).
 - **Chi tiết:** tường bê tông đổ ván khuôn (đường ghép ván, lỗ ty), rêu và vệt bẩn chân tường, vệt rỉ dưới mép tường; hàng rào lưới + dây thép gai trên đỉnh tường bao; sàn có đường cắt mỗi 3 m, rãnh thoát nước có nắp lưới, nắp cống, vết dầu; đáy bể có vệt rong ở mép nước và bùn ở đáy, mặt nước có váng trôi; bồn lắng có mối hàn, cửa người chui, ống nhánh có van, thước đo mực nước, cầu gạt bùn và bộ truyền động trên nóc; khung thép có giằng chéo, đèn pha treo, móc cẩu; hành lang có máng cáp, tủ vòi chữa cháy, van tay, đèn có lồng bảo vệ, số khoang B-01…B-08; sảnh bơm có ốp chân tường, vì kèo thật, khung ô kính, máy bơm có bệ thép, khớp nối, đồng hồ áp, van tay, ống luồn dây, tủ điện MCC có biển điện áp, cửa cuốn. Phần chi tiết chỉ để nhìn, không thêm vật cản.
 - **Chơi một mình:** cắt 3 relay (trong hành lang, giữa bể phía bắc bồn, trong sảnh bơm) rồi tới xe EVAC ở khu phía đông. Robot xuất hiện ở hành lang, mép bể, sảnh bơm và khu phía đông.
+- **Map có tường bao** (`arena` trong dữ liệu level = mép trong tường bao): chỗ đặt robot và người chơi khi xuất hiện (`spotOutside` trong `units/units.js`, có truyền độ cao sàn) chỉ tính vật cản ở tầm người, nên mái sảnh bơm không đẩy chỗ xuất hiện ra ngoài; và chỗ đó luôn nằm trong tường bao. Trước đây lính xuất hiện ở sảnh bơm bị đẩy ra ngoài tường bao phía nam, trông như robot đi xuyên tường. Map khác không có `arena` nên vẫn như cũ.
+- **Chó robot (hound, mọi map):** bị người chơi hoặc con khác đẩy trong lúc đang vướng vật cản trước mặt thì không bị đẩy ra khỏi lưới đi lại nữa (trước đây có thể bị đẩy lọt qua tường; sửa trong `game/js/10_game.js`).
 - **Free-for-all:** 14 điểm xuất phát (hai khu hồi sinh, hành lang, góc mép bể, góc sảnh bơm).
 - **Minimap:** vẽ bể nước, bỏ mái sảnh bơm để thấy máy bơm bên trong.
-- **Test:** nhiệm vụ một mình chạy trọn; đi bộ bằng phím qua cả 3 cửa khu hồi sinh, leo cầu thang lên cầu thép, đi hết cầu và xuống đầu bên kia, lội xuống bể (tiếng bước là nước); 49/49 đồ nhặt và mọi điểm xuất phát tới được, không món nào nằm trong vật cản; vào phòng 2 đội thì Blue/Red xuất phát đúng khu của mình, cả hai vào trận chỉ có súng lục và bất tử 2,5 s, nhặt PAC-9 thì có súng trường, chết hồi sinh lại về súng lục; tiếng bước chân người khác: đi bộ có, đi khom trên nền khô không có, lội nước có (cả khi khom), trên cầu thép là tiếng thép.
+- **Test:** 45 lính gọi ra ở cả 15 điểm xuất hiện đều nằm trong map (lính ở sảnh bơm ở lại trong sảnh), theo dõi robot từng khung hình không con nào lọt vào hay cắt qua vật cản; đi ngang trên cầu thang và trên cầu thép không rơi; nhiệm vụ một mình chạy trọn; đi bộ bằng phím qua cả 3 cửa khu hồi sinh, leo cầu thang lên cầu thép, đi hết cầu và xuống đầu bên kia, lội xuống bể (tiếng bước là nước); 49/49 đồ nhặt và mọi điểm xuất phát tới được, không món nào nằm trong vật cản; vào phòng 2 đội thì Blue/Red xuất phát đúng khu của mình, cả hai vào trận chỉ có súng lục và bất tử 2,5 s, nhặt PAC-9 thì có súng trường, chết hồi sinh lại về súng lục; tiếng bước chân người khác: đi bộ có, đi khom trên nền khô không có, lội nước có (cả khi khom), trên cầu thép là tiếng thép.
 
 ## desert (map sa mạc)
 

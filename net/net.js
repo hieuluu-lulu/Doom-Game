@@ -984,12 +984,25 @@ function SXN_remoteShot(p, m) {
   var G = SXN.G
   if (!SXN_inGame() || !m.d) return
   var V3 = lt.Vector3, av = p.av
-  var o = av && av.visible && av.sv ? av.sv.muzzle(new V3()) : new V3(m.o[0], m.o[1], m.o[2])
-  var d = new V3(m.d[0], m.d[1], m.d[2]).normalize()
-  var end = null
-  try { var h = G.physics.raycast(o, d, 160); end = h ? h.point : null } catch (e) { }
-  if (!end) end = o.clone().addScaledVector(d, 160)
-  try { if (typeof CXR_glassTrace === 'function') CXR_glassTrace(o, d, end.distanceTo(o)) } catch (e) { } // window glass (crossroads)
+  // the shot is the shooter's eye ray (m.o, m.d); the tracer is drawn from the
+  // gun of their avatar to where that ray stops — a wall, me, or another
+  // player — so it meets what the shot really hit (a line parallel to the eye
+  // ray from the gun passed 20-30 cm beside it)
+  var eye = new V3(m.o[0], m.o[1], m.o[2]), d = new V3(m.d[0], m.d[1], m.d[2]).normalize()
+  var o = av && av.visible && av.sv ? av.sv.muzzle(new V3()) : eye.clone()
+  var len = 160
+  try { var h = G.physics.raycast(eye, d, len); if (h) len = h.dist } catch (e) { }
+  try {
+    var me = G.player
+    if (me && me.alive && typeof SXU_playerRay === 'function' && (SXN_ffa() || p.team !== SXN.team)) { var tm = SXU_playerRay(me, eye, d, len); if (tm >= 0) len = tm }
+  } catch (e) { }
+  for (var id in SXN.players) {
+    var q = SXN.players[id]
+    if (id === SXN.myId || q === p || q.dead || !q.av || !q.av.visible || !q.av.sv || (!SXN_ffa() && q.team === p.team)) continue
+    try { var hq = q.av.sv.raycast(eye, d, len); if (hq && hq.dist < len) len = hq.dist } catch (e) { }
+  }
+  var end = eye.clone().addScaledVector(d, len)
+  try { if (typeof CXR_glassTrace === 'function') CXR_glassTrace(eye, d, len) } catch (e) { } // window glass (crossroads)
   try { G.fx.tracer(o, end) } catch (e) { }
   try { G.render.lightPool.flash(o, 0xffb070, 28, 6, 0.05) } catch (e) { }
   var pitch = m.w === 'shotgun' ? 0.7 : m.w === 'sniper' ? 0.56 : m.w === 'pistol' ? 1.3 : 1
@@ -1546,7 +1559,7 @@ function SXN_spawnPoint(first) {
   // a base may say how far from its spot a player lands (waterworks: inside the spawn pocket)
   var a = Math.random() * 6.28, r = Math.random() * (b.r != null ? b.r : 3)
   var pos = b.pos.clone().add(new V3(Math.cos(a) * r, 0, Math.sin(a) * r))
-  if (G.units && G.units.spotOutside) pos = G.units.spotOutside(pos.x, pos.z, 0.6)
+  if (G.units && G.units.spotOutside) pos = G.units.spotOutside(pos.x, pos.z, 0.6, b.pos.y || 0)
   pos.y = G.physics.groundHeight(pos.x, pos.z, pos.y + 2)
   return { pos: pos, yaw: b.yaw }
 }

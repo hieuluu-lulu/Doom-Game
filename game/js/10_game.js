@@ -23398,13 +23398,18 @@ void main() {
             l = a ? a.dist : r,
             c = i.player;
           if (c && c.alive) {
-            let u = nm.copy(c.pos);
-            u.y += 1;
-            let h = u.sub(n).dot(s);
-            if (h > 0 && h < l) {
-              zf.copy(n).addScaledVector(s, h);
-              let f = Math.abs(zf.y - (c.pos.y + 0.95));
-              if (Math.hypot(zf.x - c.pos.x, zf.z - c.pos.z) < 0.38 && f < 0.95) return (c.damage(o, n), !0);
+            // the player's body as a capsule (units/units.js: SXU_playerRay; crouching / leaning count)
+            if (typeof SXU_playerRay == "function") {
+              if (SXU_playerRay(c, n, s, l) >= 0) return (c.damage(o, n), !0);
+            } else {
+              let u = nm.copy(c.pos);
+              u.y += 1;
+              let h = u.sub(n).dot(s);
+              if (h > 0 && h < l) {
+                zf.copy(n).addScaledVector(s, h);
+                let f = Math.abs(zf.y - (c.pos.y + 0.95));
+                if (Math.hypot(zf.x - c.pos.x, zf.z - c.pos.z) < 0.38 && f < 0.95) return (c.damage(o, n), !0);
+              }
             }
           }
           return (
@@ -28113,6 +28118,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         (m.blocked
           ? (($ = m.pos.x + m.push.x * T),
             (ue = m.pos.z + m.push.z * T),
+            me.isWalkable && !me.isWalkable($, ue) && (($ = m.pos.x), (ue = m.pos.z), m.push.set(0, 0, 0)),
             (m.yawRate += (m.phase > 3.14 ? 1 : -1) * 4 * T))
           : me.isWalkable($, m.pos.z)
             ? (ue = m.pos.z)

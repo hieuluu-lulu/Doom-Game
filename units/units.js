@@ -44,6 +44,35 @@
 // ============================================================================
 
 var SXU_TYPES = {}
+// The player as the robots' bullets see them (U.cast, combat.enemyShot): a
+// capsule as wide as the body (r, the player's own collider is 0.32 m) from the
+// feet to the top of the head, `stand` m tall, `crouch` m crouched; its top
+// follows the eye, so leaning takes the head out of the line of fire.
+var SXU_PHIT = { r: 0.34, stand: 1.85, crouch: 1.2 }
+// distance along the ray (o, unit d) to the player, or -1
+function SXU_playerRay(P, o, d, max) {
+  var H = SXU_PHIT, top = P.crouching ? H.crouch : H.stand, e = P.eye || P.pos
+  return SXU_capsuleRay(o, d, { x: P.pos.x, y: P.pos.y + H.r, z: P.pos.z }, { x: e.x, y: P.pos.y + top - H.r, z: e.z }, H.r, max)
+}
+// ray vs capsule (a → b, radius r): distance or -1
+function SXU_capsuleRay(o, d, a, b, r, max) {
+  var bax = b.x - a.x, bay = b.y - a.y, baz = b.z - a.z, oax = o.x - a.x, oay = o.y - a.y, oaz = o.z - a.z
+  var baba = bax * bax + bay * bay + baz * baz, bard = bax * d.x + bay * d.y + baz * d.z, baoa = bax * oax + bay * oay + baz * oaz
+  var rdoa = d.x * oax + d.y * oay + d.z * oaz, oaoa = oax * oax + oay * oay + oaz * oaz
+  var A = baba - bard * bard, B = baba * rdoa - baoa * bard, C = baba * oaoa - baoa * baoa - r * r * baba, h = B * B - A * C
+  if (h >= 0 && A > 1e-9) {
+    var t = (-B - Math.sqrt(h)) / A, y = baoa + t * bard
+    if (y > 0 && y < baba && t >= 0 && t <= max) return t
+  }
+  // the end caps (also a ray along the axis)
+  var best = -1
+  for (var k = 0; k < 2; k++) {
+    var c = k ? b : a, ox = o.x - c.x, oy = o.y - c.y, oz = o.z - c.z
+    var bb = d.x * ox + d.y * oy + d.z * oz, cc = ox * ox + oy * oy + oz * oz - r * r, hh = bb * bb - cc
+    if (hh >= 0) { var t2 = -bb - Math.sqrt(hh); if (t2 >= 0 && t2 <= max && (best < 0 || t2 < best)) best = t2 }
+  }
+  return best
+}
 var SXU_PLUGINS = [] // function (U, G): other features hook U.hooks.reset / U.hooks.update
 var SXU = null
 
@@ -152,13 +181,9 @@ function SXU_build(G) {
       if (!U.pilot) {
         var P = G.player
         if (P && P.alive) {
-          // the player as a capsule (same test as combat.enemyShot)
-          tmp.copy(P.pos); tmp.y += 1
-          var t = tmp.sub(o).dot(d)
-          if (t > 0 && t < dist) {
-            tmp2.copy(o).addScaledVector(d, t)
-            if (Math.hypot(tmp2.x - P.pos.x, tmp2.z - P.pos.z) < 0.42 && Math.abs(tmp2.y - (P.pos.y + 0.95)) < 0.95) out = { dist: t, point: tmp2.clone(), normal: d.clone().negate(), surface: 'player', kind: 'player' }
-          }
+          // the player as a capsule (SXU_playerRay, same test as combat.enemyShot)
+          var t = SXU_playerRay(P, o, d, dist)
+          if (t >= 0) out = { dist: t, point: o.clone().addScaledVector(d, t), normal: d.clone().negate(), surface: 'player', kind: 'player' }
         }
       }
     }
@@ -484,20 +509,29 @@ function SXU_build(G) {
 
   // ------------------------------------------------------------- director
   var D = { spawned: {} }
-  function spotOutside(x, z, r) {
-    // a sand spot near (x, z) clear of boxes, for parking / spawning
+  function spotOutside(x, z, r, y) {
+    // a sand spot near (x, z) clear of boxes, for parking / spawning. With y
+    // (the floor height at x, z: someone standing there) on a walled map (one
+    // with level.arena {x0, x1, z0, z1}: waterworks) only the boxes at body
+    // height count, so a roof or a catwalk overhead does not push the spot away
+    // (the pump hall's roof covers the whole hall), and the spot stays inside
+    // the arena's walls. Other maps: as before (any box in the way, any height).
+    var ar = G.level && G.level.arena, lvl = !!ar && typeof y === 'number' && isFinite(y)
+    var boxes = G.physics.boxes || []
     for (var k = 0; k < 40; k++) {
       var a = k * 2.39996, rr = k === 0 ? 0 : 1.5 + k * 0.6
-      var px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr, clear = true
-      var boxes = G.physics.boxes || []
+      var px = x + Math.cos(a) * rr, pz = z + Math.sin(a) * rr, clear = true, gy = 0
+      if (lvl && (px - r < ar.x0 || px + r > ar.x1 || pz - r < ar.z0 || pz + r > ar.z1)) continue
+      if (lvl) gy = U.groundAt(px, pz, y + 0.45) // the floor there (a step up at most, not a crate top)
       for (var b = 0; b < boxes.length && clear; b++) {
         var bx = boxes[b]
         if (bx.bulletOnly) continue
+        if (lvl && (bx.max.y <= gy + 0.42 || bx.min.y >= gy + 1.9)) continue
         if (px + r > bx.min.x && px - r < bx.max.x && pz + r > bx.min.z && pz - r < bx.max.z) clear = false
       }
-      if (clear) return new V3(px, U.groundAt(px, pz, 999), pz)
+      if (clear) return new V3(px, lvl ? gy : U.groundAt(px, pz, 999), pz)
     }
-    return new V3(x, U.groundAt(x, z, 999), z)
+    return new V3(x, lvl ? U.groundAt(x, z, y + 0.45) : U.groundAt(x, z, 999), z)
   }
   U.spotOutside = spotOutside
   function directorReset() {
