@@ -50,6 +50,21 @@ var SXN_TUNE = {
   // grace: no round can end in its first seconds (everyone still spawning);
   // pause / matchPause: the banner time before the next round / match
   rounds: { def: 5, min: 1, max: 15, by: 2, grace: 3, pause: 4, matchPause: 8, gone: 6, ffaTime: 180 },
+  // ICE: how two browsers find a path to each other. STUN tells each one its
+  // public address (a direct, peer-to-peer path); TURN relays the traffic when
+  // no direct path exists — a VPN such as Cloudflare WARP / 1.1.1.1, mobile
+  // data / carrier NAT, strict office networks. PeerJS's own free TURN
+  // (eu-0 / us-0.turn.peerjs.com) is gone, so rooms across such networks need
+  // a TURN of their own: put it in `turn` (e.g. a free Metered or ExpressTURN
+  // account: { urls: ['turn:host:80', 'turn:host:443?transport=tcp', 'turns:host:443?transport=tcp'],
+  // username: '…', credential: '…' }), or open the game once with
+  // ?turn=<url,url>&turnuser=<user>&turnpass=<password> (kept in this browser;
+  // ?turn=off forgets it). Everything here is public in the page, as with any
+  // browser TURN setup: use a TURN account with a quota you are fine sharing.
+  ice: {
+    stun: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'],
+    turn: [],
+  },
   // spawn protection (s) at the match start and after every respawn; firing ends it early
   protect: 2.5,
   // robots per room setting (host picks in the lobby): share of the solo
@@ -182,8 +197,29 @@ function SXN_mapMarkers() {
 }
 
 // ---------------------------------------------------------------- transport
+// the ICE servers for every connection: the STUN list, the TURN entries in
+// SXN_TUNE.ice.turn, and a TURN given in the link (?turn=…, remembered)
+function SXN_iceServers() {
+  var T = SXN_TUNE.ice, list = [{ urls: T.stun.slice() }], saved = null, q = new URLSearchParams(location.search)
+  ;(T.turn || []).forEach(function (t) { if (t && t.urls && (t.urls.length || typeof t.urls === 'string')) list.push(t) })
+  try { saved = JSON.parse(localStorage.getItem('doomzone.turn') || 'null') } catch (e) { saved = null }
+  var tq = q.get('turn')
+  if (tq === 'off') { saved = null; try { localStorage.removeItem('doomzone.turn') } catch (e) { } }
+  else if (tq) {
+    var urls = tq.split(',').map(function (s) { return s.trim() }).filter(function (u) { return /^turns?:[^\s"'<>]+$/.test(u) })
+    saved = urls.length ? { urls: urls, username: q.get('turnuser') || '', credential: q.get('turnpass') || '' } : null
+    try { saved ? localStorage.setItem('doomzone.turn', JSON.stringify(saved)) : localStorage.removeItem('doomzone.turn') } catch (e) { }
+  }
+  if (saved && saved.urls && saved.urls.length) list.push(saved)
+  return list
+}
+function SXN_turnHosts() {
+  var out = []
+  SXN_iceServers().forEach(function (s) { [].concat(s.urls || []).forEach(function (u) { var m = /^turns?:([^:?]+)/.exec(u); if (m && out.indexOf(m[1]) < 0) out.push(m[1]) }) })
+  return out
+}
 function SXN_peerOpts() {
-  var q = new URLSearchParams(location.search), o = { debug: 0 }
+  var q = new URLSearchParams(location.search), o = { debug: 0, config: { iceServers: SXN_iceServers() } }
   if (q.get('peerhost')) {
     o.host = q.get('peerhost'); o.port = +(q.get('peerport') || 443); o.path = q.get('peerpath') || '/'
     o.secure = q.get('peersecure') !== '0'
@@ -228,6 +264,7 @@ function SXN_netError(e) {
   if (t === 'peer-unavailable') return 'Room not found — check the code'
   if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') return 'Can\'t reach the matchmaking server (internet needed)'
   if (t === 'browser-incompatible') return 'This browser has no WebRTC'
+  if (t === 'webrtc' || t === 'negotiation-failed') return 'No network path to the room — a VPN (WARP / 1.1.1.1), mobile data or a strict network; turn the VPN off or set up a TURN relay (README → TURN)'
   return 'Network error: ' + (t || e)
 }
 function SXN_onGuest(conn) {
@@ -411,7 +448,20 @@ function SXN_join(code, name, team, cb) {
   var fail = function (msg) { if (done) return; done = true; try { peer.destroy() } catch (e) { } cb(msg) }
   peer.on('open', function () {
     var conn = peer.connect(SXN_TUNE.idPrefix + code, { reliable: true, serialization: 'json' })
-    var to = setTimeout(function () { fail('No answer from room ' + code) }, 15000)
+    // the room exists (an unknown code fails at once with peer-unavailable): no
+    // data channel means no network path between the two players
+    var noPath = function () {
+      var relay = SXN_turnHosts()
+      return relay.length
+        ? 'Found room ' + code + ' but could not connect, even through the TURN relay (' + relay.join(', ') + ') — check its username / password and quota'
+        : 'Found room ' + code + ' but there is no direct path between your networks — a VPN (Cloudflare WARP / 1.1.1.1), mobile data or a strict network blocks it. Turn the VPN off and try again, or set up a TURN relay (README → TURN)'
+    }
+    var to = setTimeout(function () { clearInterval(iceT); fail(noPath()) }, 15000)
+    var iceT = setInterval(function () {
+      var pc = conn.peerConnection
+      if (done) { clearInterval(iceT); return }
+      if (pc && pc.iceConnectionState === 'failed') { clearInterval(iceT); clearTimeout(to); fail(noPath()) }
+    }, 500)
     conn.on('open', function () { conn.send({ t: 'hello', v: SXN_TUNE.version, name: SXN_clean(name), team: team || '' }) })
     conn.on('data', function (m) {
       if (!m || typeof m !== 'object') return
@@ -419,7 +469,7 @@ function SXN_join(code, name, team, cb) {
       if (m.t === 'hb') return
       if (m.t === 'reject') { clearTimeout(to); fail(m.why === 'full' ? 'Room ' + code + ' is full (' + (m.room || SXN_TUNE.max) + '/' + (m.room || SXN_TUNE.max) + ')' : 'Different game version than the host'); return }
       if (m.t === 'welcome' && !done) {
-        clearTimeout(to); done = true
+        clearTimeout(to); clearInterval(iceT); done = true
         // the host's map / seed: reload into it and join again from there
         if (m.map !== SXN_mapName() || String(m.seed) !== String(SXN.G.params.seed || 4207)) {
           try { peer.destroy() } catch (e) { }
@@ -454,7 +504,7 @@ function SXN_join(code, name, team, cb) {
       try { SXN_handle(m) } catch (e) { console.error('[net] recv', e) }
     })
     conn.on('close', function () { if (done && SXN.conn === conn) SXN_hostLeft(); else fail('Connection closed') })
-    conn.on('error', function () { if (!done) fail('Connection failed') })
+    conn.on('error', function () { if (!done) { clearInterval(iceT); clearTimeout(to); fail(noPath()) } })
   })
   peer.on('error', function (e) { if (!done) fail(SXN_netError(e)); else SXN_status(SXN_netError(e)) })
 }
@@ -1519,6 +1569,7 @@ function SXN_buildUi() {
     '<section class="sxn-setup">' +
     '<label class="sxn-f">Your name<input class="sxn-name" maxlength="14" autocomplete="off" spellcheck="false"></label>' +
     '<div class="sxn-block"><button class="btn primary sxn-create" type="button">Create a room</button><p>Friends join with your room code. Everyone picks Blue or Red in the room.</p></div>' +
+    '<p class="sxn-relay"></p>' +
     '<div class="sxn-sep"><span>or join a room</span></div>' +
     '<div class="sxn-block"><label class="sxn-f">Room code<input class="sxn-code" maxlength="5" autocomplete="off" spellcheck="false" placeholder="ABCDE"></label>' +
     '<button class="btn sxn-join" type="button">Join room</button></div>' +
@@ -1544,6 +1595,9 @@ function SXN_buildUi() {
   var q = function (s) { return panel.querySelector(s) }
   var ui = { panel: panel, name: q('.sxn-name'), code: q('.sxn-code'), status: q('.sxn-status'), setup: q('.sxn-setup'), room: q('.sxn-room'), codev: q('.sxn-codev'), count: q('.sxn-count'), note: q('.sxn-note'), go: q('.sxn-go'), team: '' }
   ui.cols = { blue: q('.sxn-col.blue'), red: q('.sxn-col.red') }
+  var relay = SXN_turnHosts()
+  q('.sxn-relay').textContent = relay.length ? 'TURN relay: ' + relay.join(', ') + ' — players behind VPNs / mobile data can connect' : 'No TURN relay set: players behind a VPN (WARP / 1.1.1.1), mobile data or strict networks may not connect'
+  q('.sxn-relay').classList.toggle('off', !relay.length)
   ui.teams = q('.sxn-teams'); ui.ffa = q('.sxn-ffa'); ui.modeBtns = panel.querySelectorAll('.sxn-mode button')
   ui.modeBtns.forEach(function (b) { b.addEventListener('click', function () { SXN_pickMode(b.dataset.mode) }) })
   ui.sub = q('.sxn-sub'); ui.sizeV = q('.sxn-sizev'); ui.sizeN = q('.sxn-sizen'); ui.dec = q('.sxn-dec'); ui.inc = q('.sxn-inc')

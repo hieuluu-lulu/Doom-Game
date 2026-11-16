@@ -145,3 +145,7 @@ body.sxn-mp .h-relays { display: none; }
 .sxn-rounds input:focus { outline: none; border-color: var(--signal, #ffb347); }
 .sxn-rounds input:disabled { opacity: .7; }
 .sxn-rounds i { font-style: normal; font-size: 11px; color: var(--bone-faint, #888); }
+
+/* whether a TURN relay is configured */
+.sxn-relay { margin: 6px 0 0; font-size: 11px; line-height: 1.4; color: var(--bone-faint, #888); }
+.sxn-relay.off { color: #e0a060; }

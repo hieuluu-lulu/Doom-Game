@@ -133,7 +133,13 @@ Số người một phòng tuỳ map và do host chọn. Ở màn hình chính b
 - **Kết nối:**
   - WebRTC P2P qua thư viện PeerJS (`net/lib/10_peerjs.min.js`).
   - Máy chủ miễn phí `0.peerjs.com` chỉ dùng để bắt cặp lúc vào phòng (trao đổi mã phòng và thông tin kết nối, trong đó có địa chỉ IP). Dữ liệu trận đấu đi thẳng giữa các máy.
-  - Nếu hai máy không nối thẳng được thì đi qua máy TURN miễn phí của PeerJS.
+  - Tìm đường nối thẳng bằng STUN của Google và Cloudflare (`SXN_TUNE.ice.stun`).
+  - **TURN (đường chuyển tiếp khi không nối thẳng được):** máy TURN miễn phí của PeerJS (`eu-0`/`us-0.turn.peerjs.com`) đã ngừng hoạt động (tên miền không còn), nên mặc định **không có TURN**. Khi đó người dùng VPN (Cloudflare WARP / 1.1.1.1), 4G hoặc mạng công ty chặt thường không vào được phòng: thấy phòng nhưng không nối được, sau khoảng 15 giây báo "Found room … but there is no direct path between your networks…". Cách xử lý:
+    - Tắt VPN rồi vào lại, hoặc
+    - Dùng một máy TURN riêng (ví dụ tài khoản miễn phí của Metered hay ExpressTURN, lấy `urls`, `username`, `credential`). Có 2 cách đặt:
+      - Trong code: điền vào `SXN_TUNE.ice.turn` ở `net/net.js`, ví dụ `turn: [{ urls: ['turn:host:80', 'turn:host:443?transport=tcp', 'turns:host:443?transport=tcp'], username: '…', credential: '…' }]`, rồi build lại. Áp dụng cho mọi người dùng bản đó.
+      - Qua link: mở game một lần với `?turn=<url>,<url>&turnuser=<user>&turnpass=<mật khẩu>` (mã hoá `?` trong url thành `%3F`). Trình duyệt đó nhớ cấu hình; `?turn=off` để xoá.
+    - Bảng Multiplayer ghi rõ đang có TURN hay không ("TURN relay: …" / "No TURN relay set…"). Thông tin TURN nằm công khai trong trang (như mọi cấu hình TURN chạy trên trình duyệt), nên dùng tài khoản có hạn mức bạn chấp nhận chia sẻ.
   - Muốn dùng máy chủ PeerJS riêng thì thêm `?peerhost=…&peerport=…&peerpath=…` vào đường dẫn.
 - **Host làm chủ thế giới:**
   - Robot (Gull, Hound, lính, robot to, máy bay địch) chỉ do host sinh ra. Máy khách tạo bản sao và ghim theo vị trí host gửi 10 lần/giây.
