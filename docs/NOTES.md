@@ -739,8 +739,9 @@ Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình
   - Khi mở balo thì không bắn được, chuột được thả ra để bấm; game không dừng. Chỉnh số: `TU.bag` trong `arsenal/arsenal.js`.
 - **Đạn theo cỡ (kiểu PUBG):** đạn nằm trong balo theo từng cỡ: 5.56 (PAC-9, sọc xanh lá), 12 GA (KR-12, sọc đỏ), .50 AE (M7, sọc vàng), .338 (SR-3, sọc xanh dương).
   - Đạn dự trữ của súng chính là số đạn cùng cỡ trong balo: nạp đạn lấy từ đó, HUD hiện đúng số đó. Mang được đạn cho súng chưa có; nhặt súng mới thì được thêm vài băng đạn của nó nếu balo còn chỗ.
-  - Hộp đạn trên đất ghi cỡ và súng dùng (ví dụ ".338 ×5 · SR-3"); mỗi hộp: 5.56 ×30, 12 GA ×6, .50 AE ×12, .338 ×5. Thùng "Mixed ammo crate" ở cứ điểm và trên map cho đạn của các súng bạn đang có.
-  - Lính robot rơi đúng cỡ đạn của súng nó cầm (súng trường → 5.56, xạ thủ → .338, lính nặng → 12 GA hoặc 5.56); drone và chó rơi ngẫu nhiên (nhiều nhất 5.56); boss rơi đủ bốn cỡ.
+  - Hộp đạn trên đất ghi cỡ và súng dùng (ví dụ ".338 ×5 · SR-3"); mỗi hộp: 5.56 ×30, 12 GA ×10, .50 AE ×12, .338 ×8. Thùng "Mixed ammo crate" ở cứ điểm và trên map cho đạn của các súng bạn đang có (5.56 +60, 12 GA +18, .50 AE +24, .338 +15).
+  - Shotgun / súng tỉa: nhặt súng mới được +24 viên 12 GA / +20 viên .338; đã có súng thì trạm súng cho +18 / +15 (`TU.shotgun` / `TU.sniper`: `pickup`, `crate`).
+  - Cỡ hộp đạn robot rơi (`TU.dropCal`, tỉ lệ): lính súng trường 5.56 60% / 12 GA 20% / .338 20%; xạ thủ .338; lính nặng 12 GA 60% / 5.56 40%; drone và chó 5.56 35% / .50 AE 15% / 12 GA 25% / .338 25%; boss rơi đủ bốn cỡ (mỗi cỡ 2 hộp).
   - Trong bảng Tab mỗi cỡ đạn là một dòng riêng, ghi súng dùng nó, vứt ra thành hộp đạn đúng cỡ. Chơi online chết thì đạn về lại số khởi đầu (5.56 ×150, .50 AE ×48).
 - **Tên vật phẩm:** hiện tên và khoảng cách trên tối đa 4 món trong vòng 6 m, cộng món đang nhắm vào xa tới 35 m; bị tường che thì ẩn.
 - **Thông báo nhặt đồ:** thẻ có hình ở góc trái dưới ("Picked up · 4x scope → PAC-9", "+30 PAC-9", "Dropped").

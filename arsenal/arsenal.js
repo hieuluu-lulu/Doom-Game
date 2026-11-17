@@ -19,7 +19,7 @@ var SXA_TUNE = {
   sniper: {
     name: 'SR-3 Albatross', short: 'SR-3', mag: 5, reserve: 15, maxReserve: 40,
     damage: 118, range: 650, spreadHip: 0.05, spreadAds: 0.0004, bolt: 1.15,
-    reload: 2.5, reloadEmpty: 3.0, crate: 10, drop: 5, pickup: 15, pitch: 0.56, gain: 1.45,
+    reload: 2.5, reloadEmpty: 3.0, crate: 15, drop: 8, pickup: 20, pitch: 0.56, gain: 1.45,
   },
   rifleMaxReserve: 300,
   // the PAC-9 as a pickup (maps whose rooms start on the pistol, level.mpKit
@@ -49,7 +49,7 @@ var SXA_TUNE = {
     name: 'KR-12 Breakwater', short: 'KR-12', mag: 6, reserve: 18, maxReserve: 42,
     pellets: 9, damage: 14, range: 48, spreadHip: 0.062, spreadAds: 0.042,
     pump: 0.62, shellStart: 0.34, shellEach: 0.47, shellEnd: 0.3,
-    crate: 12, drop: 6, pickup: 18, pitch: 0.7, gain: 1.25,
+    crate: 18, drop: 10, pickup: 24, pitch: 0.7, gain: 1.25,
   },
   // the Desert Eagle model (SXA_pistolGeoModel): GLB in cm, muzzle +Z; its
   // bore / muzzle are put where the M7's were. right = palm contact nudge (m),
@@ -114,6 +114,14 @@ var SXA_TUNE = {
   throwLift: 3.4,
   gravity: 17,
   crateRespawn: 60,
+  // the calibre of the ammo box a robot drops (weights): rifle troopers mostly
+  // 5.56, marksmen .338, heavies 12 GA / 5.56; drones and dogs anything
+  dropCal: {
+    rifle: { '556': 60, '12g': 20, '338': 20 },
+    marksman: { '338': 100 },
+    heavy: { '12g': 60, '556': 40 },
+    other: { '556': 35, '50ae': 15, '12g': 25, '338': 25 },
+  },
   dropLife: 45,
   maxDrops: 24,
   // first aid: a small kit adds 20% but never past 80%, a kit tops up to 80%,
@@ -217,9 +225,9 @@ var SXA_MEDS = { med_s: 'Small medkit', med: 'Medkit', med_l: 'Large medkit' };
 // per calibre from a mixed ammo crate, start = the starting kit.
 var SXA_CAL = {
   '556': { label: '5.56', gun: 'rifle', color: '#8fe07a', tint: [0.72, 1.0, 0.62], box: 30, crate: 60, start: 150 },
-  '12g': { label: '12 GA', gun: 'shotgun', color: '#ff7a66', tint: [1.25, 0.6, 0.55], box: 6, crate: 12, start: 0 },
+  '12g': { label: '12 GA', gun: 'shotgun', color: '#ff7a66', tint: [1.25, 0.6, 0.55], box: 10, crate: 18, start: 0 },
   '50ae': { label: '.50 AE', gun: 'pistol', color: '#ffd24a', tint: [1.3, 1.08, 0.5], box: 12, crate: 24, start: 48 },
-  '338': { label: '.338', gun: 'sniper', color: '#7ab8ff', tint: [0.6, 0.82, 1.35], box: 5, crate: 10, start: 0 },
+  '338': { label: '.338', gun: 'sniper', color: '#7ab8ff', tint: [0.6, 0.82, 1.35], box: 8, crate: 15, start: 0 },
 };
 var SXA_CAL_ORDER = ['556', '12g', '50ae', '338'];
 var SXA_GUN_CAL = { rifle: '556', shotgun: '12g', pistol: '50ae', sniper: '338' };
@@ -2786,9 +2794,11 @@ function SXA_buildArsenal(G, rifle) {
       // ammo of the calibre it fired: rifle troopers 5.56, marksmen .338,
       // heavies 12 GA or 5.56; drones and dogs anything, mostly 5.56
       if (rng() < pAmmo) {
-        var vr2 = e && e.variant, rc = rng();
-        var calD = trooper ? (vr2 === 'marksman' ? '338' : vr2 === 'heavy' ? (rc < 0.5 ? '12g' : '556') : '556')
-          : rc < 0.5 ? '556' : rc < 0.7 ? '50ae' : rc < 0.85 ? '12g' : '338';
+        var vr2 = e && e.variant, W = TU.dropCal[trooper ? (vr2 === 'marksman' || vr2 === 'heavy' ? vr2 : 'rifle') : 'other'];
+        var tot = 0, calD = '556';
+        for (var ck in W) tot += W[ck];
+        var rc = rng() * tot;
+        for (var ck2 in W) { rc -= W[ck2]; if (rc <= 0) { calD = ck2; break; } }
         spawnDrop('ammo:' + calD, tmp.copy(pos).add(tmp2.set(rng() - 0.5, 0.3, rng() - 0.5)));
       }
       if (rng() < pNade) spawnDrop('grenade', tmp.copy(pos).add(tmp2.set(rng() - 0.5, 0.3, rng() - 0.5)));
