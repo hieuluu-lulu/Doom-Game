@@ -508,6 +508,34 @@ function SXH_layout(api) {
         ctx.loot.push({ kind: lootKind(ctx.r), pos: new lt.Vector3(lp[0], lv[lk2] + 0.03, lp[1]) })
       }
     }
+    // posts for a garrison (the plugin below): behind the windows (upper floors
+    // first), on a flat roof by the parapet; clear of the stairs and the crate
+    var post = function (lx, lz, y, nx, nz, pri) { var w = L2W(lx, lz), n = L2Wd(nx, nz); ctx.posts.push({ x: w[0], y: y, z: w[1], yaw: Math.atan2(-n[0], -n[1]), pri: pri, u: ui }) }
+    faces.forEach(function (f, fi) {
+      f.holes.forEach(function (o) {
+        if (f.doors.indexOf(o) >= 0) return
+        var k = -1
+        for (var q = 0; q < F; q++) if (Math.abs(lv[q] + WIN.sill - o[2]) < 0.02) k = q
+        if (k < 0) return
+        var mid = (o[0] + o[1]) / 2, inset = 0.22 + 0.75
+        var lx = f.x ? mid : f.at - f.n[0] * inset, lz = f.x ? f.at - f.n[1] * inset : mid
+        if (nF && lz < iz0 + 2 * LW + 0.5) return
+        if (lx > ix1 - 1.3 && lz > iz1 - 1.3) return
+        // the front looks onto the street: those first
+        post(lx, lz, lv[k], f.n[0], f.n[1], (k > 0 ? 1 : 0) + (fi === 0 ? 0.6 : fi === 1 ? -0.3 : 0))
+      })
+    })
+    // the doorways stop vehicles (people and bullets go through): SXH_carBlocks
+    faces.forEach(function (f) {
+      f.doors.forEach(function (o) {
+        var p0 = f.x ? L2W(o[0], f.at - f.n[1] * 0.24) : L2W(f.at - f.n[0] * 0.24, o[0]), p1 = f.x ? L2W(o[1], f.at + f.n[1] * 0.02) : L2W(f.at + f.n[0] * 0.02, o[1])
+        ctx.doors.push({ min: { x: Math.min(p0[0], p1[0]), y: 0, z: Math.min(p0[1], p1[1]) }, max: { x: Math.max(p0[0], p1[0]), y: o[3], z: Math.max(p0[1], p1[1]) }, surface: 'concrete' })
+      })
+    })
+    if (flat) faces.forEach(function (f) {
+      var lx = f.x ? W / 4 : f.at - f.n[0] * 0.9, lz = f.x ? f.at - f.n[1] * 0.9 : D / 4
+      post(lx, lz, lv[F], f.n[0], f.n[1], f === faces[0] ? 2.2 : 1.7)
+    })
   }
 
   // ---- desert trees
@@ -871,7 +899,7 @@ function SXH_layout(api) {
     var n0 = t.staticRoot.children.length, d0 = t.dynRoot.children.length, b0 = G.physics.boxes.length, p0 = t.placed.length
     var plan = s.kind === 'town' ? planTown(s, r) : s.kind === 'ranch' ? planRanch(s, r) : planGroup(s, r)
     var buckets = new Map(), inner = new lt.Group(), far = new lt.Group()
-    var ctx = { r: r, panes: [], loot: [], inner: inner, far: far, bucket: function (m) { if (!buckets.has(m)) buckets.set(m, { pos: [], nrm: [], uv: [] }); return buckets.get(m) } }
+    var ctx = { r: r, panes: [], loot: [], posts: [], doors: [], inner: inner, far: far, bucket: function (m) { if (!buckets.has(m)) buckets.set(m, { pos: [], nrm: [], uv: [] }); return buckets.get(m) } }
     plan.units.forEach(function (u) { house(u, ui++, ctx) })
     buckets.forEach(function (bk, m) {
       if (!bk.pos.length) return
@@ -893,6 +921,8 @@ function SXH_layout(api) {
     boxes.forEach(function (b) { b.min.y += Y; b.max.y += Y })
     ctx.panes.forEach(function (p) { p.c.y += Y; p.y0 += Y; allPanes.push(p) })
     ctx.loot.forEach(function (l) { l.pos.y += Y; SXH_LOOT.push(l) })
+    ctx.posts.forEach(function (q) { q.y += Y })
+    ctx.doors.forEach(function (q) { q.min.y += Y; q.max.y += Y })
     if (typeof SXD_GROUPS !== 'undefined') SXD_GROUPS.push({ site: s, nodes: nodes })
     // the insides (merged on their own: drawn near only) and their far stand-in
     var mi = By(inner), mf = By(far)
@@ -902,13 +932,14 @@ function SXH_layout(api) {
     mi.visible = false
     t.dynRoot.add(mi); t.dynRoot.add(mf)
     SXH_ST.built.push({ site: s, y: Y, units: plan.units, shell: boxes.filter(function (b) { return !b.sxhIn }), ins: boxes.filter(function (b) { return b.sxhIn }),
-      on: false, onIn: false, holder: null, inner: mi, far: mf, near: false })
+      on: false, onIn: false, holder: null, inner: mi, far: mf, near: false, posts: ctx.posts, doors: ctx.doors, gar: [], garOn: false, cleared: false })
   })
 
   // colliders in and out of the physics with the players' distance; the
   // insides / far stand-ins and the models with the camera's
   var cam = G.camera, B = G.physics.boxes
   var swap = function (list, on) {
+    if (G.physics.markDirty) G.physics.markDirty() // its broadphase grid (game/js/10_game.js)
     if (on) { for (var k = 0; k < list.length; k++) B.push(list[k]); return }
     var set = new Set(list), w = 0
     for (var q = 0; q < B.length; q++) if (!set.has(B[q])) B[w++] = B[q]
@@ -923,7 +954,8 @@ function SXH_layout(api) {
       // the walls and roofs within a sniper's range, the stairs, floors and furniture close by
       var want = b.on ? d < SXH_ACTIVE + 50 : d < SXH_ACTIVE
       if (want !== b.on) { b.on = want; swap(b.shell, want) }
-      var wantIn = b.onIn ? d < SXH_ACTIVE_IN + 30 : d < SXH_ACTIVE_IN
+      var held = b.gar && b.gar.some(function (u) { return u.alive }) && d < SXH_ACTIVE + 50 // its garrison stands on those floors
+      var wantIn = held || (b.onIn ? d < SXH_ACTIVE_IN + 30 : d < SXH_ACTIVE_IN)
       if (wantIn !== b.onIn) { b.onIn = wantIn; swap(b.ins, wantIn) }
       var dc = Math.hypot(cx - s.x, cz - s.z) - s.r, vis = dc < SXD_GROUP_DRAW
       var near = b.near ? dc < SXH_INSIDE + 30 : dc < SXH_INSIDE
@@ -1035,4 +1067,76 @@ function SXH_models(t) {
       try { if (t.G.renderer && t.G.renderer.shadowMap) t.G.renderer.shadowMap.needsUpdate = true } catch (e) { }
     })
   }).catch(function (e) { console.warn('[houses] apartment model unavailable, plain walls stay', e) })
+}
+
+// ---------------------------------------------------------------- garrisons
+// The towns, the ranch and the small groups are held: when a player comes
+// within SXH_ACTIVE_IN m, troopers take posts behind the windows (upper floors
+// first) and on the roofs (troopers/troopers.js spawnPost: they fight from
+// there and never leave). All down: the place is clear (radio). Everybody
+// gone past SXH_ACTIVE + 100 m: the rest stand down, and the place is held
+// again on the next visit. Online only the host spawns (guests get twins).
+var SXH_GARRISON = { town: 7, ranch: 5, group: 3 } // troopers per place (groups of 2+ houses only)
+var SXH_VARIANTS = [['rifle', 0.6], ['marksman', 0.25], ['heavy', 0.15]]
+if (typeof SXU_PLUGINS !== 'undefined') SXU_PLUGINS.push(function SXH_garrisons(U, G) {
+  if (!U.desert) return
+  var V3 = lt.Vector3
+  U.hooks.reset.push(function () { (SXH_ST.built || []).forEach(function (b) { b.gar = []; b.garOn = false; b.cleared = false }) })
+  var pickVariant = function () { var x = Math.random(); for (var i = 0; i < SXH_VARIANTS.length; i++) { x -= SXH_VARIANTS[i][1]; if (x <= 0) return SXH_VARIANTS[i][0] } return 'rifle' }
+  U.hooks.update.push(function () {
+    if (!G.game || G.game.state !== 'playing' || !U.troopers || !U.troopers.spawnPost) return
+    if (typeof SXN !== 'undefined' && SXN.active && SXN.role === 'guest') return
+    var P = G.player
+    if (!P) return
+    ;(SXH_ST.built || []).forEach(function (b) {
+      var s = b.site, n = s.kind === 'group' ? (s.n > 1 ? SXH_GARRISON.group : 0) : SXH_GARRISON[s.kind] || 0
+      if (!n || !b.posts || !b.posts.length) return
+      var d = Math.hypot(P.pos.x - s.x, P.pos.z - s.z) - s.r
+      if (typeof SXN_nearestOps === 'function') d = SXN_nearestOps(s.x, s.z, d + s.r) - s.r
+      if (!b.garOn && !b.cleared && d < SXH_ACTIVE_IN && b.onIn) {
+        // roofs and upper windows first, at most two per building
+        var posts = b.posts.map(function (p) { return { p: p, k: p.pri + Math.random() * 0.8 } }).sort(function (a, c) { return c.k - a.k }).map(function (a) { return a.p }), per = {}
+        b.gar = []
+        for (var k = 0; k < posts.length && b.gar.length < n; k++) {
+          var q = posts[k]
+          if ((per[q.u] = (per[q.u] || 0) + 1) > 2) continue
+          var u = U.troopers.spawnPost(new V3(q.x, q.y, q.z), q.yaw, pickVariant())
+          if (u) b.gar.push(u)
+        }
+        b.garOn = b.gar.length > 0
+        if (b.garOn && s.name) U.radio('Control: contact — ' + s.name + ' is held. Watch the windows and the roofs.', 5)
+      } else if (b.garOn) {
+        var left = b.gar.filter(function (u) { return u.alive })
+        if (!left.length) {
+          b.garOn = false; b.cleared = true
+          if (s.name) {
+            U.radio('Control: ' + s.name + ' is clear. Good work.', 4)
+            var h = U.hud && U.hud()
+            h && h.feed && h.feed('<b class="sx-pk">' + s.name + '</b> cleared')
+          }
+        } else if (d > SXH_ACTIVE + 100) {
+          // everybody left: stand down, held again next time
+          left.forEach(function (u) { try { U.remove(u) } catch (e) { } })
+          b.gar = []; b.garOn = false
+        }
+      }
+    })
+  })
+})
+
+// Vehicles can't drive into the houses: the doorways are wide enough for a
+// buggy (an apartment block's is 2.4 m), so cars/cars.js gatherBoxes also takes
+// a box across every doorway near it from here — not in the physics, so people
+// and bullets still go through
+function SXH_carBlocks(pos, r, out) {
+  var B = SXH_ST.built || []
+  for (var k = 0; k < B.length; k++) {
+    var b = B[k], s = b.site
+    if (!b.on || !b.doors || Math.hypot(pos.x - s.x, pos.z - s.z) > s.r + r + 5) continue
+    for (var j = 0; j < b.doors.length; j++) {
+      var d = b.doors[j]
+      if (pos.x + r < d.min.x || pos.x - r > d.max.x || pos.z + r < d.min.z || pos.z - r > d.max.z || pos.y + r < d.min.y || pos.y - r > d.max.y) continue
+      out.push(d)
+    }
+  }
 }

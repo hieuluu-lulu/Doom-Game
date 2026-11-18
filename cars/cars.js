@@ -37,7 +37,10 @@ var SXC_SPECS = {
     accel: 11, topSpeed: 28, boostMul: 1.35, boostAccel: 2.0, reverseTop: 9, brake: 20, steerMax: 0.6, steerMin: 0.15, steerRate: 3.4,
     grip: 1.45, gripHandbrake: 0.42, latStiff: 0.32, tireLift: 0.95, downforce: 1.1, antiRoll: 26000,
     // collision spheres [x, y, z, r] (body frame)
-    hull: [[-0.6, 0.0, -1.55, 0.45], [0.6, 0.0, -1.55, 0.45], [-0.6, 0.0, 1.45, 0.45], [0.6, 0.0, 1.45, 0.45], [0, 0.2, 0, 0.62], [-0.55, 1.05, 0.15, 0.35], [0.55, 1.05, 0.15, 0.35]],
+    // the last pair: the nose and the tail (frame, tank, rocket nozzles) reach
+    // past the corner spheres — without them the back half-metre went into walls
+    hull: [[-0.6, 0.0, -1.55, 0.45], [0.6, 0.0, -1.55, 0.45], [-0.6, 0.0, 1.45, 0.45], [0.6, 0.0, 1.45, 0.45], [0, 0.2, 0, 0.62], [-0.55, 1.05, 0.15, 0.35], [0.55, 1.05, 0.15, 0.35],
+      [-0.5, 0.12, -1.72, 0.4], [0.5, 0.12, -1.72, 0.4], [-0.5, 0.15, 1.98, 0.4], [0.5, 0.15, 1.98, 0.4]],
     box: { min: [-1.0, -0.35, -2.0], max: [1.0, 1.32, 1.8] },
     camDist: 6.6, camHeight: 1.5, fov: 72,
     runOver: { radius: 2.0, damage: 10, selfDamage: 6 },
@@ -645,6 +648,8 @@ function SXC_vehicle(G, U, spec, opts, build) {
       if (pos.x + r < b.min.x || pos.x - r > b.max.x || pos.z + r < b.min.z || pos.z - r > b.max.z || pos.y + r < b.min.y || pos.y - r > b.max.y) continue
       near.push(b)
     }
+    // the houses' doorways (houses/houses.js): cars only
+    if (typeof SXH_carBlocks === 'function') SXH_carBlocks(pos, r, near)
   }
 
   function applyAt(force, point, F, T) {

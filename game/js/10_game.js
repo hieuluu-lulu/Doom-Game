@@ -4816,7 +4816,14 @@ float metalnessFactor = metalness * slORM.b;
         },
         removeBox(_) {
           let M = e.indexOf(_);
-          M >= 0 && (e.splice(M, 1), (t = !0));
+          M >= 0 && (e.splice(M, 1), (t = !0), (SG.dirty = !0));
+        },
+        get broadphase() {
+          return SG; // tests (SG.off: test every box)
+        },
+        // mod: features that change the box list directly (houses) say so here
+        markDirty() {
+          SG.dirty = !0;
         },
         build() {
           a();
@@ -4848,8 +4855,9 @@ float metalnessFactor = metalness * slORM.b;
           let j = D === 0 ? 1 / 0 : 1 / D,
             N = C === 0 ? 1 / 0 : 1 / C,
             Q = G === 0 ? 1 / 0 : 1 / G;
-          for (let F = 0; F < e.length; F++) {
-            let X = e[F];
+          let sgL = sgRay(q, T, D, G, w, SG.rayOut); // mod: broadphase
+          for (let F = 0; F < sgL.length; F++) {
+            let X = sgL[F];
             if (X.playerOnly) continue;
             let ne = 0,
               re = w,
@@ -4911,8 +4919,9 @@ float metalnessFactor = metalness * slORM.b;
         },
         groundHeight(_, M, E = 50) {
           let w = SXD_TH ? SXD_TH(_, M) : _ <= oi.quayX ? oi.groundY : oi.seaY;
-          for (let S = 0; S < e.length; S++) {
-            let z = e[S];
+          let sgL = sgRect(_, M, _, M, SG.ghOut); // mod: broadphase
+          for (let S = 0; S < sgL.length; S++) {
+            let z = sgL[S];
             z.bulletOnly ||
               (_ >= z.min.x &&
                 _ <= z.max.x &&
@@ -4929,14 +4938,16 @@ float metalnessFactor = metalness * slORM.b;
             O = M.x * E,
             q = M.z * E,
             U = Math.max(1, Math.ceil(Math.hypot(O, q) / (w * 0.6))),
-            T = _.y;
+            T = _.y,
+            // mod: broadphase — the boxes round the whole move (pushes can nudge it a little further)
+            mcL = sgRect(Math.min(_.x, _.x + O) - w - 1.5, Math.min(_.z, _.z + q) - w - 1.5, Math.max(_.x, _.x + O) + w + 1.5, Math.max(_.z, _.z + q) + w + 1.5, SG.mcOut);
           for (let K = 0; K < U; K++) {
             ((_.x += O / U), (_.z += q / U));
             SXD_TH && SXD_slope(_, M, T, O / U, q / U);
             for (let ie = 0; ie < 3; ie++) {
               let F = !1;
-              for (let X = 0; X < e.length; X++) {
-                let ne = e[X];
+              for (let X = 0; X < mcL.length; X++) {
+                let ne = mcL[X];
                 if (ne.bulletOnly || ne.max.y <= _.y + (z ? u1 : 0.08) || ne.min.y >= _.y + S) continue;
                 let re = Math.max(ne.min.x, Math.min(ne.max.x, _.x)),
                   $ = Math.max(ne.min.z, Math.min(ne.max.z, _.z)),
@@ -4976,8 +4987,8 @@ float metalnessFactor = metalness * slORM.b;
             j = null,
             N = 1 / 0,
             Q = T + (z ? u1 : 0.08) + 1e-4;
-          for (let K = 0; K < e.length; K++) {
-            let ie = e[K];
+          for (let K = 0; K < mcL.length; K++) {
+            let ie = mcL[K];
             ie.bulletOnly ||
               _.x + C < ie.min.x ||
               _.x - C > ie.max.x ||
@@ -5050,6 +5061,103 @@ float metalnessFactor = metalness * slORM.b;
           _grid: () => (r(), { blocked: n, w: qt, h: Qs, minX: Ya, minZ: ol, cell: Ls }),
         },
       };
+    // mod: broadphase. raycast / groundHeight / moveCapsule used to test every
+    // box; now a uniform x/z grid (SG.C m cells) gives the few near the query.
+    // Rebuilt lazily when the list changes (its length, addBox, removeBox,
+    // markDirty); boxes spanning more than 64 cells are always tested.
+    var SG = { C: 8, cells: new Map(), big: [], len: -1, dirty: !0, q: 0, rayOut: [], ghOut: [], mcOut: [] };
+    function sgKey(cx, cz) {
+      return (cx + 32768) * 65536 + (cz + 32768);
+    }
+    function sgBuild() {
+      SG.cells.clear();
+      SG.big.length = 0;
+      for (let i = 0; i < e.length; i++) {
+        let b = e[i];
+        b._i = i; // candidates go back in this order: the push-out is order-dependent
+        let x0 = Math.floor(b.min.x / SG.C),
+          x1 = Math.floor(b.max.x / SG.C),
+          z0 = Math.floor(b.min.z / SG.C),
+          z1 = Math.floor(b.max.z / SG.C);
+        if ((x1 - x0 + 1) * (z1 - z0 + 1) > 64) {
+          SG.big.push(b);
+          continue;
+        }
+        for (let cx = x0; cx <= x1; cx++)
+          for (let cz = z0; cz <= z1; cz++) {
+            let k = sgKey(cx, cz),
+              Lc = SG.cells.get(k);
+            Lc ? Lc.push(b) : SG.cells.set(k, [b]);
+          }
+      }
+      SG.len = e.length;
+      SG.dirty = !1;
+    }
+    function sgStart(out) {
+      (SG.dirty || SG.len !== e.length) && sgBuild();
+      if (SG.off) {
+        // tests: every box, as before the grid
+        out.length = 0;
+        for (let b of e) out.push(b);
+        return -1;
+      }
+      let q = ++SG.q;
+      out.length = 0;
+      for (let b of SG.big) ((b._sg = q), out.push(b));
+      return q;
+    }
+    // the boxes over an x/z rectangle, each once
+    function sgRect(x0, z0, x1, z1, out) {
+      let q = sgStart(out);
+      if (q < 0) return out;
+      let cx0 = Math.floor(x0 / SG.C),
+        cx1 = Math.floor(x1 / SG.C),
+        cz0 = Math.floor(z0 / SG.C),
+        cz1 = Math.floor(z1 / SG.C);
+      if ((cx1 - cx0 + 1) * (cz1 - cz0 + 1) > 256) {
+        out.length = 0;
+        for (let b of e) out.push(b);
+        return out;
+      }
+      for (let cx = cx0; cx <= cx1; cx++)
+        for (let cz = cz0; cz <= cz1; cz++) {
+          let Lc = SG.cells.get(sgKey(cx, cz));
+          if (Lc) for (let b of Lc) b._sg !== q && ((b._sg = q), out.push(b));
+        }
+      return out.length > 1 ? out.sort(sgByI) : out;
+    }
+    function sgByI(a, b) {
+      return a._i - b._i;
+    }
+    // the boxes in the cells a ray's x/z shadow crosses, up to len (2D DDA)
+    function sgRay(ox, oz, dx, dz, len, out) {
+      let q = sgStart(out);
+      if (q < 0) return out;
+      let C = SG.C,
+        cx = Math.floor(ox / C),
+        cz = Math.floor(oz / C),
+        ex = Math.floor((ox + dx * len) / C),
+        ez = Math.floor((oz + dz * len) / C),
+        sx = dx > 0 ? 1 : dx < 0 ? -1 : 0,
+        sz = dz > 0 ? 1 : dz < 0 ? -1 : 0,
+        tx = sx ? ((cx + (sx > 0 ? 1 : 0)) * C - ox) / dx : 1 / 0,
+        tz = sz ? ((cz + (sz > 0 ? 1 : 0)) * C - oz) / dz : 1 / 0,
+        ddx = sx ? C / Math.abs(dx) : 1 / 0,
+        ddz = sz ? C / Math.abs(dz) : 1 / 0;
+      for (let n = 0; n < 100000; n++) {
+        let Lc = SG.cells.get(sgKey(cx, cz));
+        if (Lc) for (let b of Lc) b._sg !== q && ((b._sg = q), out.push(b));
+        if (cx === ex && cz === ez) break;
+        if (tx < tz) {
+          if (tx > len) break;
+          ((cx += sx), (tx += ddx));
+        } else {
+          if (tz > len) break;
+          ((cz += sz), (tz += ddz));
+        }
+      }
+      return out.length > 1 ? out.sort(sgByI) : out;
+    }
     function r() {
       t && a();
     }

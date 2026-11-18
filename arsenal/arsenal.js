@@ -231,6 +231,8 @@ var SXA_CAL = {
 };
 var SXA_CAL_ORDER = ['556', '12g', '50ae', '338'];
 var SXA_GUN_CAL = { rifle: '556', shotgun: '12g', pistol: '50ae', sniper: '338' };
+// a map pickup's name on every machine of a room: kind and spot (net/net.js 'pk')
+function SXA_pickKey(p) { return p.kind + '@' + p.pos.x.toFixed(1) + ',' + p.pos.y.toFixed(1) + ',' + p.pos.z.toFixed(1); }
 function SXA_isCal(kind) { return typeof kind === 'string' && kind.indexOf('ammo:') === 0 && !!SXA_CAL[kind.slice(5)]; }
 // backpacks (pickups bag1-3): their level sets the carry capacity (SXA_TUNE.bag.caps)
 var SXA_PACKS = { bag1: { lv: 1, label: 'Backpack Lv.1' }, bag2: { lv: 2, label: 'Backpack Lv.2' }, bag3: { lv: 3, label: 'Backpack Lv.3' } };
@@ -2870,6 +2872,8 @@ function SXA_buildArsenal(G, rifle) {
           else {
             p.holder.visible = false;
             p.respawn = (p.kind === 'shotgun' && L.owned.shotgun) || (p.kind === 'sniper' && L.owned.sniper) || (p.kind === 'rifle' && L.owned.rifle) ? TU.crateRespawn * 1.5 : p.kind.indexOf('att:') === 0 ? 120 : SXA_ARMOR[p.kind] || SXA_PACKS[p.kind] ? TU.armor.respawn : p.kind === 'med_s' ? TU.med.respawnSmall : p.kind === 'med' ? TU.med.respawnKit : p.kind === 'med_l' ? TU.med.respawnLarge : TU.crateRespawn;
+            // a room: the others' copy of it goes too (net/net.js 'pk')
+            try { G.events.emit('pickup:taken', { key: SXA_pickKey(p), respawn: p.respawn }); } catch (e) { }
           }
         } else if (L.fullMsgT <= 0) {
           L.fullMsgT = 4;
@@ -3779,7 +3783,7 @@ function SXA_buildArsenal(G, rifle) {
     get root() { return cur().root; },
     get debug() { return rifle.debug; },
     get info() { return rifle.info; },
-    arsenal: { knife: { equip: function () { knifeEquip(); }, holster: function () { knifeHolster(); }, get out() { return !!L.knOut; }, get mode() { return L.kn && L.kn.mode; }, get style() { return knifeStyle().id; }, freeze: function (style, t) { var i = TU.knife.styles.findIndex(function (x) { return x.id === style; }); if (i >= 0) L.knStyle = i; if (!L.knOut) knifeEquip(); L.kn = { mode: 'slash', t: t, hit: true, freeze: true }; knifeShow(t); }, model: !!knifeVM.model, root: knifeVM.root }, knifeKeys: KP, guns: guns, loadout: L, heal: startHeal, cycleScope: function () { cycleScope(); }, armorCut: armorCut, pickups: function () { return pickups; }, grenades: function () { return live; }, select: requestSwitch, tune: TU, bag: { open: function (v) { setBag(v); }, get isOpen() { return BP.open; }, items: function () { return bagItems(); }, used: function () { return bagUsed(); }, cap: function () { return bagCap(); }, takeOff: function () { takeOffPack(); }, drop: function (k, all) { dropItem(k, all); } }, spawnPickup: function (kind, pos) { var pk = makePickup(kind, pos, false); pickups.push(pk); return pk; }, resetPickups: function () { placePickups(); } },
+    arsenal: { knife: { equip: function () { knifeEquip(); }, holster: function () { knifeHolster(); }, get out() { return !!L.knOut; }, get mode() { return L.kn && L.kn.mode; }, get style() { return knifeStyle().id; }, freeze: function (style, t) { var i = TU.knife.styles.findIndex(function (x) { return x.id === style; }); if (i >= 0) L.knStyle = i; if (!L.knOut) knifeEquip(); L.kn = { mode: 'slash', t: t, hit: true, freeze: true }; knifeShow(t); }, model: !!knifeVM.model, root: knifeVM.root }, knifeKeys: KP, guns: guns, loadout: L, heal: startHeal, cycleScope: function () { cycleScope(); }, armorCut: armorCut, pickups: function () { return pickups; }, grenades: function () { return live; }, select: requestSwitch, tune: TU, bag: { open: function (v) { setBag(v); }, get isOpen() { return BP.open; }, items: function () { return bagItems(); }, used: function () { return bagUsed(); }, cap: function () { return bagCap(); }, takeOff: function () { takeOffPack(); }, drop: function (k, all) { dropItem(k, all); } }, spawnPickup: function (kind, pos) { var pk = makePickup(kind, pos, false); pickups.push(pk); return pk; }, resetPickups: function () { placePickups(); }, takeRemote: function (key, respawn) { for (var i = 0; i < pickups.length; i++) { var p = pickups[i]; if (p.isDrop || !p.active || SXA_pickKey(p) !== key) continue; p.active = false; p.holder.visible = false; p.respawn = Math.max(1, +respawn || TU.crateRespawn); return true; } return false; } },
     update: function (dt) {
       ensureEnemies();
       if (typeof SXU !== 'undefined' && SXU && SXU.pilot) {

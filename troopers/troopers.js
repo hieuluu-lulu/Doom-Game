@@ -269,6 +269,9 @@ SXU_TYPES.trooper = function (G, U, opts) {
     lastKnown: opts.lastKnown ? opts.lastKnown.clone() : null, wp: null, path: null, pathI: 0, pathT: 0, act: 'hold', actT: 0,
     crouch: 0, crouchWant: 0, aimYaw: 0, aimPitch: 0, recoil: 0, flinch: 0, flinchV: 0, cool: 1 + Math.random(), burst: 0, shotT: 0, token: false,
     tele: -1, stun: 0, dyingT: -1, wreckT: 0, hurtT: 9, strafe: 0, stepPhase: 0, guard: !!opts.guard,
+    // a post (houses/houses.js garrisons): stand there — behind a window, on a
+    // roof — facing postYaw; fight from it, never leave it
+    post: opts.post ? opts.post.clone() : null, postYaw: opts.postYaw || 0,
     feet: [
       { s: -1, plant: new V3(), from: new V3(), to: new V3(), t: 1, lift: 0 },
       { s: 1, plant: new V3(), from: new V3(), to: new V3(), t: 1, lift: 0 },
@@ -281,7 +284,7 @@ SXU_TYPES.trooper = function (G, U, opts) {
     radius: 1.3, solid: { r: 0.4, h: 1.9, m: variant === 'heavy' ? 6 : 4 },
     center: function (o) { return (o || new V3()).set(pos.x, pos.y + 1.0 * C.scale, pos.z) },
     raycast: raycast, damage: damage, update: update, stun: function (sec) { S.stun = Math.max(S.stun, sec) },
-    alert: function (at) { if (!unit.alive) return; S.lastKnown = (S.lastKnown || new V3()).copy(at); if (S.state === 'patrol') setState('search') },
+    alert: function (at) { if (!unit.alive) return; S.lastKnown = (S.lastKnown || new V3()).copy(at); if (S.post) S.heardT = 0; else if (S.state === 'patrol') setState('search') },
     dispose: function () { G.scene.remove(group); if (laser) G.scene.remove(laser); if (SV) SV.dispose(); releaseToken() },
     debug: S,
   }
@@ -442,6 +445,16 @@ SXU_TYPES.trooper = function (G, U, opts) {
     else { S.lostT += SXT_TUNE.think; S.seeT = Math.max(0, S.seeT - SXT_TUNE.think * 2) }
     // tactics
     S.actT -= SXT_TUNE.think
+    if (S.post) {
+      // hold the post: fight from it, duck behind the sill / parapet now and then
+      S.goal = S.post; S.act = 'hold'
+      if (S.state === 'search' || S.state === 'cover') setState(sees ? 'engage' : 'patrol')
+      if (S.state === 'engage') {
+        if (S.lostT > 4) { setState('patrol'); return }
+        if (S.actT <= 0) { S.actT = 1.6 + Math.random() * 2.2; S.crouchWant = Math.random() < 0.35 ? 1 : 0 }
+      }
+      return
+    }
     if (S.state === 'engage') {
       if (S.lostT > 3.2) { setState('search'); return }
       if (S.actT <= 0) {
@@ -633,6 +646,12 @@ SXU_TYPES.trooper = function (G, U, opts) {
       // face the target when engaging
       if (S.lastKnown) S.yawWant = Math.atan2(-(S.lastKnown.x - pos.x), -(S.lastKnown.z - pos.z))
     }
+    // at the post: face out, or for a while towards the last shot heard / foe seen
+    if (S.post && S.state === 'patrol' && Math.hypot(S.post.x - pos.x, S.post.z - pos.z) < 0.5) {
+      S.heardT = (S.heardT == null ? 99 : S.heardT) + dt
+      var lk = S.lastKnown
+      S.yawWant = lk && (S.heardT < 8 || S.lostT < 8) ? Math.atan2(-(lk.x - pos.x), -(lk.z - pos.z)) : S.postYaw
+    }
     S.crouch += (S.crouchWant - S.crouch) * Math.min(1, dt * 5)
     if (S.state !== 'engage' && S.state !== 'cover') S.crouchWant = 0
     // turn
@@ -772,6 +791,15 @@ SXU_PLUGINS.push(function SXT_plugin(U, G) {
     return out
   }
 
+  // one trooper at a post (houses/houses.js garrisons): exactly there, no
+  // clear-spot search (that would push it out of the building)
+  function spawnPost(p, yaw, variant) {
+    if (botScale() <= 0) return null
+    var u = U.spawn('trooper', { pos: p.clone(), yaw: yaw, variant: variant || 'rifle', home: p.clone(), guard: true, state: 'patrol', post: p, postYaw: yaw })
+    if (u) spawned++
+    return u
+  }
+
   U.hooks.reset.push(function () {
     mission = []; pending = [{ t: 9, n: 2 }]; now = 0; reinfT = 60
     SXT_STATE.tokens.clear(); SXT_STATE.lastStart = -9
@@ -816,5 +844,5 @@ SXU_PLUGINS.push(function SXT_plugin(U, G) {
       g.forEach(function (u) { site.garrison.push(u) })
     })
   })
-  U.troopers = { spawnSquad: spawnSquad, mission: function () { return mission }, tune: SXT_TUNE }
+  U.troopers = { spawnSquad: spawnSquad, spawnPost: spawnPost, mission: function () { return mission }, tune: SXT_TUNE }
 })

@@ -294,7 +294,7 @@ function SXN_onGuest(conn) {
 // wall-hacks; this keeps them from breaking other players' games.)
 var SXN_GUARD = {
   // messages per second per guest, per type (token buckets, burst = 1.5 s)
-  rate: { p: 24, shot: 30, hit: 30, dmg: 45, died: 1, team: 2, ready: 4 },
+  rate: { p: 24, shot: 30, hit: 30, dmg: 45, died: 1, team: 2, ready: 4, pk: 4 },
   flood: 260,          // any messages/s from one guest above this → kicked
   hitMax: 320,         // one player hit (after pvpScale): an SR-3 headshot is ~160, a missile ~300
   hitPerSec: 650,      // total player damage one sender may deal per second
@@ -303,7 +303,7 @@ var SXN_GUARD = {
   dmgRange: 1600,
   speed: 210,          // m/s between two states (jets top out ~130) → teleport
   WEAPONS: { rifle: 1, shotgun: 1, pistol: 1, sniper: 1, talon: 1, harrow: 1, kestrel: 1, warden: 1, sandcat: 1, rhino: 1 },
-  TYPES: { p: 1, shot: 1, hit: 1, died: 1, dmg: 1, team: 1, ready: 1 },
+  TYPES: { p: 1, shot: 1, hit: 1, died: 1, dmg: 1, team: 1, ready: 1, pk: 1 },
 }
 function SXN_num(v, lo, hi) { return typeof v === 'number' && isFinite(v) && v >= lo && v <= hi }
 function SXN_v3(a, lim) { return Array.isArray(a) && a.length === 3 && SXN_num(a[0], -lim, lim) && SXN_num(a[1], -lim, lim) && SXN_num(a[2], -lim, lim) }
@@ -347,9 +347,13 @@ function SXN_valid(m) {
     case 'dmg': return SXN_str(m.k, 12, /^[eu]\d{1,7}$/) && SXN_num(m.a, 0, g.dmgMax) && (m.p == null || SXN_str(m.p, 12))
     case 'team': return m.team === 'blue' || m.team === 'red'
     case 'ready': m.on = !!m.on; return true
+    // a map pickup taken: its key (kind@x,y,z, arsenal SXA_pickKey) and the respawn time
+    case 'pk': return SXN_str(m.k, 80, /^[a-z0-9:_]+@-?\d{1,5}\.\d,-?\d{1,4}\.\d,-?\d{1,5}\.\d$/) && SXN_num(m.r, 0, 900)
   }
   return false
 }
+// the position in a pickup key
+function SXN_pickPos(k) { var a = k.split('@')[1].split(','); return { x: +a[0], y: +a[1], z: +a[2] } }
 function SXN_near(p, pos, r) {
   var s = SXN_last(p)
   return !!s && s.al && Math.hypot(s.x - pos.x, s.z - pos.z) <= r && Math.abs(s.y - pos.y) <= r
@@ -357,6 +361,8 @@ function SXN_near(p, pos, r) {
 // game-sense checks on the host (after the field checks)
 function SXN_sensible(conn, p, m) {
   var g = SXN_GUARD, now = performance.now()
+  // only someone standing at a pickup can take it
+  if (m.t === 'pk') return SXN_near(p, SXN_pickPos(m.k), 6)
   if (m.t === 'p') {
     // teleports: a state far from the last one too soon is dropped (respawns,
     // long gaps and a run of 30 drops in a row — lag — are let through)
@@ -439,7 +445,7 @@ function SXN_hostRecv(conn, m) {
     if (m.to !== 'h' && SXN.guests[m.to]) SXN_sendTo(SXN.guests[m.to], m)
     return
   }
-  if (m.t === 'p' || m.t === 'shot' || m.t === 'died') SXN_relay(m, conn.__id)
+  if (m.t === 'p' || m.t === 'shot' || m.t === 'died' || m.t === 'pk') SXN_relay(m, conn.__id)
 }
 function SXN_dropGuest(conn) {
   var id = conn.__id
@@ -662,6 +668,8 @@ function SXN_install(G) {
     SXN_emit({ t: 'shot', o: [+o.x.toFixed(2), +o.y.toFixed(2), +o.z.toFixed(2)], d: [+ev.dir.x.toFixed(3), +ev.dir.y.toFixed(3), +ev.dir.z.toFixed(3)], w: SXN_weapon() })
   })
   G.events.on('player:dead', function () { if (SXN.active) SXN_localDeath() })
+  // map pickups: what this player takes is gone for everybody (arsenal/arsenal.js)
+  G.events.on('pickup:taken', function (ev) { if (SXN.active && ev && ev.key) SXN_emit({ t: 'pk', k: ev.key, r: Math.round(ev.respawn || 0) }) })
   // Survival room: a downed player is back once the wave is cleared, next to a teammate
   G.events.on('survival:cleared', function () {
     if (SXN.active && SXN_surv() && SXN_inGame() && G.player && !G.player.alive) SXN_respawn()
@@ -774,6 +782,8 @@ function SXN_handle(m) {
       break
     case 'died': SXN_markDeath(m.from, m.by); break
     case 'w': if (SXN.role === 'guest') SXN_applyWorld(m); break
+    // somebody took a map pickup: it goes here too (until it respawns)
+    case 'pk': try { G.weapon.arsenal.takeRemote && G.weapon.arsenal.takeRemote(m.k, m.r) } catch (e) { } break
     case 'dmg': if (SXN.role === 'host') SXN_hostDamage(m); break
   }
 }

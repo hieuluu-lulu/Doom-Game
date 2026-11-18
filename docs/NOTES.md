@@ -99,6 +99,8 @@ Trước đây mọi model nằm trong một file `index.html` 20 MB (khoảng 1
 
 Số người một phòng tuỳ map và do host chọn. Ở màn hình chính bấm **Multiplayer** (nút ghi "Up to N" theo map đang chọn).
 
+- **Đồ nhặt trên map được đồng bộ:** ai nhặt một món đồ của map (không phải đồ rơi) thì món đó biến mất trên máy mọi người cho tới khi hồi lại. Arsenal phát sự kiện `pickup:taken` kèm khoá món đồ (`SXA_pickKey`: loại@x,y,z, giống nhau trên mọi máy vì đồ được rải giống nhau) và thời gian hồi; `net/net.js` gửi tin `pk`. Host kiểm tra (đúng định dạng, tối đa 4 tin/giây, người gửi đứng trong 6 m quanh món đồ) rồi phát cho mọi người; máy nhận gọi `arsenal.takeRemote`. Hai người nhặt cùng lúc thì vẫn có thể cùng được. Súng đặt trên map trong phòng (trạm vũ khí) vẫn như cũ: ai cũng lấy được.
+
 - **Không có nhiệm vụ cắt relay khi chơi nhiều người** (chơi một mình vẫn y như cũ):
   - Relay vẫn đứng trên map làm cảnh, nhưng đứng cạnh giữ F không hiện "Cut relay" và không cắt được. Thuyền / xe EVAC không kết thúc trận. Bộ đàm mở màn nói về relay cũng bỏ.
   - Giữ nguyên khung OBJECTIVE trên HUD, chỉ đổi nội dung theo chế độ phòng: "Squad up — fight the machines together" (co-op), "Blue team — first team to 20 kills" / "Red team — …" (Blue vs Red), "Free-for-all — first to 15 kills". Đổi tự động khi chia đội thay đổi.
@@ -596,6 +598,14 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Vỏ (tường, mái, lan can, bồn nước, tường rào): chỉ có trong physics khi có người chơi trong `SXH_ACTIVE` (450 m) của nơi đó.
   - Bên trong (bậc thang, sàn, bàn, thùng, quầy): chỉ khi trong `SXH_ACTIVE_IN` (160 m).
   - Đài phun nước ở trang trại: chậu (0,55 m) và trụ cùng bát nước phía trên (tới 1,75 m) đều có va chạm (trước đây trụ và bát không có, xe chạy xuyên qua).
+  - Khi nơi đó có lính giữ còn sống, sàn và cầu thang giữ va chạm trong cả 450 m (lính đứng trên đó).
+  - Cửa nhà chặn xe (`SXH_carBlocks`): cửa căn hộ gạch rộng 2,4 m, đủ cho Sandcat (rộng 2,1 m) chui vào rồi chạy trong nhà. Mỗi khung cửa có một hộp chắn không nằm trong physics; chỉ `gatherBoxes` của xe (`cars/cars.js`) lấy thêm các hộp này, nên người và đạn vẫn đi qua. Cổng trang trại thì không chặn (xe vào sân được).
+- **Lính giữ thị trấn** (plugin `SXH_garrisons` cuối `houses/houses.js`): Dustwater và Copper Flats mỗi nơi 7 lính, Old Ranch 5, mỗi cụm 2–3 nhà 3 lính; nhà lẻ không có.
+  - Khi có người chơi tới trong 160 m, lính được đặt ở các vị trí chốt tính sẵn lúc dựng nhà: trên mái cạnh lan can, rồi sau cửa sổ mặt trước ở tầng trên (mặt trước nhìn ra phố), rồi cửa sổ khác; tối đa 2 lính mỗi nhà. 60 % lính súng trường, 25 % bắn tỉa, 15 % lính nặng.
+  - Chế độ chốt (`opts.post` trong `troopers/troopers.js`, sinh bằng `U.troopers.spawnPost` để không bị đẩy ra khỏi nhà như `spawnSquad`): đứng yên tại chỗ, quay mặt ra ngoài; nghe súng hoặc thấy địch thì quay về hướng đó trong 8 giây; giao chiến ngay tại chỗ, thỉnh thoảng thụp xuống sau bệ cửa hoặc lan can; không đi lùng hay chạy chỗ khác.
+  - Hạ hết thì radio báo "<tên> is clear", thông báo trên màn hình. Mọi người đi xa hơn 550 m thì số lính còn lại rút đi, lần sau tới lại có lính giữ.
+  - Chơi online: chỉ host sinh lính (máy khách thấy bản sao như các robot khác).
+  - Test: lính đứng đúng ở độ cao các tầng và mái (6,5 / 9,75 / 16,25 m so với nền), sau 6 giây không xê dịch; người chơi đứng giữa phố bị lính có đường ngắm bắn (11–32 phát trong 9 giây tuỳ vị trí chốt bốc được).
   - Chơi online: tính theo người chơi gần nhất (`SXN_nearestOps`).
   - Đo: ở điểm xuất phát vẫn là 991 hộp như trước. Đứng giữa Dustwater có 3271 hộp, một tia đạn mất khoảng 18 µs (bình thường khoảng 8 µs).
 - **Bản đồ:** nền nhà và tường rào vẽ lên ảnh nền bản đồ như các công trình khác; tên Dustwater, Copper Flats, Old Ranch hiện trên bản đồ lớn (biểu tượng ngôi nhà).
@@ -665,6 +675,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Buggy lên tới đỉnh (14–17 m) cả khi giữ W lẫn Shift, nhưng giữ Shift đi được gần gấp đôi quãng đường.
   - Rhino giữ Shift lên 15–17 m ở 72 km/h; giữ W chỉ bò lên ở 22–28 km/h.
 - Vách đá của các mesa (dốc khoảng 60°) thì không xe nào leo được; lên đỉnh mesa bằng con dốc đắp sẵn (xem phần desert, "Đường lên núi").
+- **Đuôi Sandcat:** model dài từ −2,11 đến +2,38 m dọc thân, nhưng các khối cầu va chạm chỉ phủ −2,0 đến +1,9 m, nên khi lùi hay xoay xe sát tường, nửa mét đuôi xe (khung, bình xăng, ống phun) lọt vào trong tường. Đã thêm 2 khối cầu ở mũi và 2 ở đuôi. Lùi vào tường nhà giờ dừng khi đuôi chạm mặt tường; xe vẫn leo được con dốc lên núi 72 m. (Rhino đã đủ.)
 - **Va chạm thân xe với tường mỏng** (`cars/cars.js`, `simulate` / `collide`): mỗi khung hình chia thành nhiều bước sao cho thân xe đi không quá 0,15 m mỗi bước (ít nhất 120 bước/giây, tối đa 16 bước mỗi khung). Khi tâm một khối cầu của thân xe lọt vào trong hộp va chạm, nó được đẩy ra phía mặt nó vừa đi vào (mặt có xe đang lao vào), không phải mặt gần nhất. Trước đây, nếu một khung hình bị khựng, tâm khối cầu có thể vượt quá giữa bức tường 0,2 m của nhà và bị đẩy ra phía bên kia. Test: Sandcat và Rhino bật tăng tốc lao vào 4 nhà, có và không có khung hình khựng 200 ms, cùng lô cốt ở Bunker Line: lần nào cũng bị chặn hoặc trượt sang bên.
 - **Hỗ trợ leo dốc** (`SXC_HILL` = 0,8 trong `cars/cars.js`): khi ga mà mũi xe đang chúc lên, lực kéo cộng thêm 80 % thành phần trọng lực kéo xe tụt xuống (như gài số thấp), vẫn bị giới hạn bởi độ bám của lốp. Nhờ vậy Rhino giữ W cũng leo được đồi cát và con dốc lên núi, không chỉ khi bật tăng tốc.
 - **Mép map:** xe bị chặn ở `SXD_PLAY_R` − 6 m (giờ 1494 m quanh tâm map sa mạc; trước đây 554 m). Mặt đất có tới `SXD_WORLD_R` = 1560 m, nên xe không bao giờ ra tới chỗ không có đất.
@@ -837,6 +848,13 @@ Lưu trên máy người chơi (`localStorage` khoá `doomzone.stats.v1`), khôn
 
 ## Va chạm, âm thanh, hiệu năng
 
+- **Lưới chia ô cho physics** (`d3` trong `game/js/10_game.js`, các chỗ ghi "mod: broadphase"): trước đây `raycast`, `groundHeight` và `moveCapsule` thử mọi hộp va chạm của map cho mỗi tia đạn và mỗi bước đi. Giờ các hộp được xếp vào lưới ô 8 m theo x/z (`SG`); mỗi truy vấn chỉ thử các hộp trong những ô nó chạm tới:
+  - `raycast`: các ô mà hình chiếu của tia trên mặt đất đi qua (DDA 2D), dừng ở điểm tia đã chạm đất.
+  - `groundHeight`: ô chứa điểm đó.
+  - `moveCapsule`: các ô quanh cả đoạn đi, nới thêm bán kính + 1,5 m.
+  - Hộp phủ hơn 64 ô thì luôn được thử. Lưới tự dựng lại khi danh sách hộp đổi (độ dài, `addBox`, `removeBox`, hoặc `physics.markDirty()` mà `houses/` gọi khi bật/tắt va chạm). Ứng viên được sắp lại theo thứ tự gốc, vì bước đẩy người ra khỏi tường phụ thuộc thứ tự.
+  - Đo (Chrome headless, 3000 truy vấn ngẫu nhiên mỗi loại): ở giữa Dustwater (3391 hộp) một tia đạn từ 42 µs còn 6 µs, một bước đi từ 39 µs còn 2 µs. Ở cảng, Crossroads, Waterworks cũng nhanh hơn 3–8 lần. `raycast` và `groundHeight` cho kết quả giống hệt cách cũ; `moveCapsule` giống hệt trừ 1/3000 trường hợp nhân vật bắt đầu đã nằm sẵn trong tường.
+  - Test: `physics.broadphase.off = true` đưa về cách cũ (thử mọi hộp) để so sánh.
 - **Va chạm:** mỗi xe, robot, máy bay, robot Sentinel và ụ súng có một khối trụ va chạm (`SOLID` trong `units/units.js`).
   - Hai khối chạm nhau thì bị đẩy ra theo khối lượng. Đâm nhau nhanh hơn 6,5 m/s thì cả hai mất máu.
   - Người chơi đi bộ không xuyên qua được các khối này, và mất máu khi bị đâm nhanh.
