@@ -38,7 +38,7 @@ var SXQ_REC = 'doomzone.survival.v1'
 var SXQ = { G: null, opts: null, run: null, ui: null, fps: null }
 
 function SXQ_load() {
-  var o = { mode: 'mission', diff: 'normal', aim: 1, fps: false }
+  var o = { mode: 'mission', diff: 'normal', aim: 1, fps: false, mb: false }
   try {
     var s = JSON.parse(localStorage.getItem(SXQ_KEY) || 'null')
     if (s && typeof s === 'object') {
@@ -46,6 +46,7 @@ function SXQ_load() {
       if (SXQ_TUNE.diff[s.diff]) o.diff = s.diff
       if (Number.isFinite(s.aim)) o.aim = Math.min(1.5, Math.max(0.3, s.aim))
       o.fps = !!s.fps
+      o.mb = !!s.mb
     }
   } catch (e) { }
   try {
@@ -303,6 +304,14 @@ function SXQ_over() {
   R.best = R.record ? res : old
   G.events.emit('survival:over', { wave: R.wave, cleared: R.cleared, kills: res.kills, time: res.time, diff: diff, map: map })
 }
+// a solo run left before the player fell (Restart, Main menu, closing the
+// tab) still counts once wave 1 has come, so its cleared waves can be the best
+function SXQ_leave() {
+  var R = SXQ.run
+  if (!R || R.over || R.mirror || SXQ_online() || !window.SXQ_SURV || !(R.wave >= 1)) return
+  SXQ_over()
+}
+function SXQ_waves(n) { return n + (n === 1 ? ' wave' : ' waves') + ' cleared' }
 
 // the death screen: wave / kills / best instead of the relays
 function SXQ_deadScreen() {
@@ -317,7 +326,7 @@ function SXQ_deadScreen() {
   if (!on || !stats) return
   dd.textContent = String(R.result.cleared)
   var b = R.best
-  var rows = [['Kills', String(R.result.kills)], ['Best · ' + SXQ_diff().label, R.record ? 'New best!' : b ? 'Wave ' + b.cleared + ' · ' + b.kills + ' kills' : '—']]
+  var rows = [['Kills', String(R.result.kills)], ['Best · ' + SXQ_diff().label, R.record ? 'New best!' : b ? SXQ_waves(b.cleared) + ' · ' + b.kills + ' kills' : '—']]
   rows.forEach(function (r) {
     var d = document.createElement('div')
     d.className = 'sxq-dead' + (r[1] === 'New best!' ? ' sxq-new' : '')
@@ -377,7 +386,9 @@ function SXQ_titleSync() {
   if (best) {
     var b = SXQ_best(SXQ_mapName(), SXQ.opts.diff)
     best.hidden = !surv
-    best.textContent = b ? 'Best here on ' + SXQ_TUNE.diff[SXQ.opts.diff].label + ': wave ' + b.cleared + ' cleared · ' + b.kills + ' kills · ' + SXQ_mmss(b.time) : 'No Survival run on this map at ' + SXQ_TUNE.diff[SXQ.opts.diff].label + ' yet.'
+    var lvl = SXQ_TUNE.diff[SXQ.opts.diff].label
+    best.textContent = b ? 'Best here on ' + lvl + ': ' + SXQ_waves(b.cleared) + ' · ' + b.kills + ' kills · ' + SXQ_mmss(b.time)
+      : 'No Survival run on this map at ' + lvl + ' yet. Your best run here will show up after you play one.'
   }
 }
 
@@ -391,6 +402,7 @@ function SXQ_panel() {
     ['easy', 'normal', 'hard'].map(function (k) { return '<button data-sxq-diff="' + k + '" aria-pressed="false">' + SXQ_TUNE.diff[k].label + '</button>' }).join('') + '</div></div>' +
     '<div class="row sxq-row"><label for="s-sxq-aim">Aim sensitivity</label><div class="slider"><input id="s-sxq-aim" type="range" min="0.3" max="1.5" step="0.05"><output data-o="sxq-aim"></output></div></div>' +
     '<div class="row sxq-row"><label id="l-sxq-fps">FPS counter</label><button class="toggle" data-sxq-fps aria-labelledby="l-sxq-fps" aria-pressed="false"><i></i><span>Off</span></button></div>' +
+    '<div class="row sxq-row"><label id="l-sxq-mb">Motion blur</label><button class="toggle" data-sxq-mb aria-labelledby="l-sxq-mb" aria-pressed="false"><i></i><span>Off</span></button></div>' +
     '<p class="panel-note sxq-row" data-sxq-dnote></p>'
   var box = document.createElement('div')
   box.innerHTML = html
@@ -401,7 +413,17 @@ function SXQ_panel() {
   var aim = pane.querySelector('#s-sxq-aim')
   aim.addEventListener('input', function () { SXQ.opts.aim = +aim.value; SXQ_save(); SXQ_applyAim(); SXQ_panelSync() })
   pane.querySelector('[data-sxq-fps]').addEventListener('click', function () { SXQ.opts.fps = !SXQ.opts.fps; SXQ_save(); SXQ_panelSync() })
+  pane.querySelector('[data-sxq-mb]').addEventListener('click', function () { SXQ.opts.mb = !SXQ.opts.mb; SXQ_save(); SXQ_panelSync(); SXQ_applyMb() })
   SXQ_panelSync()
+}
+// Motion blur (High / Ultra presets have it): off by default for a sharper
+// picture while turning. Off forces the current quality's flag off every
+// frame (a quality change brings a fresh preset object); On leaves the preset.
+function SXQ_applyMb() {
+  var q = SXQ.G && SXQ.G.quality
+  if (!q) return
+  if (q.__sxqMb === undefined) q.__sxqMb = !!q.motionBlur // the preset's own value
+  q.motionBlur = SXQ.opts.mb ? q.__sxqMb : false
 }
 function SXQ_panelSync() {
   var pane = document.querySelector('#ui .menu .panel-b[data-pane="settings"]')
@@ -412,6 +434,8 @@ function SXQ_panelSync() {
   if (out) out.textContent = SXQ.opts.aim.toFixed(2) + '×'
   var f = pane.querySelector('[data-sxq-fps]')
   if (f) { f.setAttribute('aria-pressed', String(SXQ.opts.fps)); f.querySelector('span').textContent = SXQ.opts.fps ? 'On' : 'Off' }
+  var mb = pane.querySelector('[data-sxq-mb]')
+  if (mb) { mb.setAttribute('aria-pressed', String(SXQ.opts.mb)); mb.querySelector('span').textContent = SXQ.opts.mb ? 'On' : 'Off' }
   var n = pane.querySelector('[data-sxq-dnote]')
   if (n) {
     var D = SXQ_TUNE.diff[SXQ.opts.diff]
@@ -464,6 +488,7 @@ function SXQ_fpsTick(dt) {
       if (ev.state === 'title') { SXQ_title(); SXQ_titleSync() }
       // a fresh run (Start, Retry, Restart)
       if (ev.state === 'playing' && (ev.prev === 'intro' || ev.prev === 'title')) {
+        SXQ_leave() // Restart in the middle of a run: that run still counts
         SXQ_apply()
         // (online: Survival room, the host's run or a guest's mirror of it)
         SXQ.run = SXQ_survOn() ? SXQ_newRun() : null
@@ -478,6 +503,11 @@ function SXQ_fpsTick(dt) {
       if (window.SXQ_SURV && SXQ.run && !SXQ_online()) SXQ_over()
       setTimeout(SXQ_deadScreen, 0)
     })
+    // Main menu (menu/menu.js reloads the page) or closing the tab mid-run
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('[data-act="sx-mainmenu"]')) SXQ_leave()
+    }, true)
+    addEventListener('pagehide', SXQ_leave)
     // ?autostart can be playing before this hooked in
     if (G.game && G.game.state === 'playing' && SXQ_survOn() && !SXQ.run) {
       SXQ.run = SXQ_newRun()
@@ -487,7 +517,7 @@ function SXQ_fpsTick(dt) {
     var loop = function () {
       var now = performance.now(), dt = Math.min(0.1, (now - last) / 1000)
       last = now
-      try { SXQ_tick(dt); SXQ_fpsTick(dt) } catch (e) { if (!SXQ._err) { SXQ._err = 1; console.error('[modes] tick', e) } }
+      try { SXQ_tick(dt); SXQ_fpsTick(dt); SXQ_applyMb() } catch (e) { if (!SXQ._err) { SXQ._err = 1; console.error('[modes] tick', e) } }
       requestAnimationFrame(loop)
     }
     requestAnimationFrame(loop)

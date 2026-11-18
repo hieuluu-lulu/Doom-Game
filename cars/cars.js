@@ -11,6 +11,9 @@
 // sits at wheel-mount height.
 // ============================================================================
 
+// hill assist: the share of the slope's pull the drive adds going uphill
+var SXC_HILL = 0.8
+
 var SXC_SPECS = {
   sandcat: {
     type: 'sandcat', label: 'Sandcat',
@@ -662,7 +665,13 @@ function SXC_vehicle(G, U, spec, opts, build) {
       var Flong = 0
       var rear = !w.steers
       if (ctl.handbrake && rear) Flong = -Math.sign(vLong) * Math.min(Math.abs(vLong) * share / h * 0.5, spec.brake * share)
-      else if (ctl.throttle > 0.05 && vF > -0.6) Flong = ctl.throttle * spec.accel * share * Math.max(0, 1 - Math.pow(Math.max(0, vF) / top, 2)) * (ctl.boost ? spec.boostAccel || 1.35 : 1)
+      else if (ctl.throttle > 0.05 && vF > -0.6) {
+        Flong = ctl.throttle * spec.accel * share * Math.max(0, 1 - Math.pow(Math.max(0, vF) / top, 2)) * (ctl.boost ? spec.boostAccel || 1.35 : 1)
+        // hill assist ("low range"): uphill the drive also covers most of the
+        // slope's pull, so dunes and the mesa tracks are climbable at any
+        // speed (the tyre grip cap below still limits it on very steep faces)
+        if (fwd.y > 0.02) Flong += ctl.throttle * spec.gravity * fwd.y * SXC_HILL * share
+      }
       else if (ctl.throttle < -0.05 && !reversing) Flong = -Math.sign(vLong) * Math.min(Math.abs(vLong) * share / h * 0.5, spec.brake * share * -ctl.throttle)
       else if (reversing) Flong = -vF > spec.reverseTop ? -vLong * share * 0.6 : ctl.throttle * spec.accel * 0.7 * share * Math.max(0, 1 - Math.pow(Math.max(0, -vF) / spec.reverseTop, 2))
       else if (ctl.throttle > 0.05 && vF <= -0.6) Flong = Math.min(Math.abs(vLong) * share / h * 0.5, spec.brake * share)
@@ -723,8 +732,8 @@ function SXC_vehicle(G, U, spec, opts, build) {
     q.normalize()
     collide(h)
     // desert: the roaming radius that stops players on foot (desert.js
-    // SXD_PLAY_R) holds vehicles too — with boost they can climb the rim
-    // ridges, and past the baked height grid there is no ground to stand on
+    // SXD_PLAY_R, the edge of the map) holds vehicles too; the ground goes on
+    // a little further (SXD_WORLD_R), so a car never reaches the flat void
     if (typeof SXD_HG !== 'undefined' && SXD_HG && typeof SXD_PLAY_R !== 'undefined') {
       var bx = pos.x - SXD_HG.cx, bz = pos.z - SXD_HG.cz, br = Math.hypot(bx, bz), lim = SXD_PLAY_R - 6
       if (br > lim) {

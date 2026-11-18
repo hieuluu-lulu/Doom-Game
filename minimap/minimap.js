@@ -23,12 +23,15 @@ function SXM_build(G) {
   var desert = typeof SX_MAP !== 'undefined' && SX_MAP === 'desert' && typeof SXD_HG !== 'undefined' && SXD_HG
   var plant = typeof SX_MAP !== 'undefined' && SX_MAP === 'waterworks'
   var city = typeof SX_MAP !== 'undefined' && SX_MAP === 'crossroads' || plant
+  // desert: the whole drivable world (desert.js SXD_WORLD_R), not only the baked grid
+  var dw = desert && typeof SXD_WORLD_R !== 'undefined' ? SXD_WORLD_R : 0
   var W = desert
-    ? { x0: SXD_HG.x0, z0: SXD_HG.z0, size: (SXD_HG.n - 1) * SXD_HG.step, major: 200, minor: 100, mini: 90, name: 'Dust Basin' }
+    ? (dw ? { x0: SXD_HG.cx - dw, z0: SXD_HG.cz - dw, size: dw * 2, major: 500, minor: 100, mini: 90, name: 'Dust Basin' }
+      : { x0: SXD_HG.x0, z0: SXD_HG.z0, size: (SXD_HG.n - 1) * SXD_HG.step, major: 200, minor: 100, mini: 90, name: 'Dust Basin' })
     : plant ? { x0: -30, z0: -30, size: 60, major: 10, minor: 5, mini: 20, name: 'Waterworks' }
     : city ? { x0: -53, z0: -53, size: 106, major: 10, minor: 5, mini: 24, name: 'Crossroads' }
     : { x0: -62, z0: -55, size: 110, major: 20, minor: 10, mini: 28, name: 'DoomZone Terminal' }
-  var IMG = desert ? 1024 : 768
+  var IMG = desert ? (dw ? 2048 : 1024) : 768
   var base = document.createElement('canvas')
   base.width = base.height = IMG
   var t0 = performance.now()
@@ -42,8 +45,24 @@ function SXM_build(G) {
     var rnd = function (i) { var x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x) }
     if (desert) {
       var H = new Float32Array(IMG * IMG)
+      // the baked grid per pixel; past it a coarse field (every CS px, straight
+      // from SXD_terrainHeight — SXD_heightAt would fill every 100 m tile of
+      // the world) sampled bilinearly
+      var hg = SXD_HG, gx1 = hg.x0 + (hg.n - 1) * hg.step, gz1 = hg.z0 + (hg.n - 1) * hg.step
+      var CS = 4, cn = Math.ceil(IMG / CS) + 1, C = new Float32Array(cn * cn), cm = mpp * CS
+      for (var cy = 0; cy < cn; cy++)
+        for (var cx2 = 0; cx2 < cn; cx2++) {
+          var wx = W.x0 + cx2 * cm, wz = W.z0 + cy * cm
+          var inB = wx > hg.x0 && wz > hg.z0 && wx < gx1 && wz < gz1
+          C[cy * cn + cx2] = inB ? SXD_heightAt(wx, wz) : SXD_terrainHeight(wx, wz)
+        }
       for (var py = 0; py < IMG; py++)
-        for (var px = 0; px < IMG; px++) H[py * IMG + px] = SXD_heightAt(W.x0 + (px + 0.5) * mpp, W.z0 + (py + 0.5) * mpp)
+        for (var px = 0; px < IMG; px++) {
+          var qx = W.x0 + (px + 0.5) * mpp, qz = W.z0 + (py + 0.5) * mpp
+          if (qx > hg.x0 && qz > hg.z0 && qx < gx1 && qz < gz1) { H[py * IMG + px] = SXD_heightAt(qx, qz); continue }
+          var fx = (px + 0.5) / CS, fy = (py + 0.5) / CS, ix = Math.min(cn - 2, fx | 0), iy = Math.min(cn - 2, fy | 0), tx = fx - ix, ty = fy - iy, o = iy * cn + ix
+          H[py * IMG + px] = (C[o] * (1 - tx) + C[o + 1] * tx) * (1 - ty) + (C[o + cn] * (1 - tx) + C[o + cn + 1] * tx) * ty
+        }
       var Lx = -0.52, Ly = 0.68, Lz = -0.52
       for (var y = 0; y < IMG; y++)
         for (var x = 0; x < IMG; x++) {
@@ -258,7 +277,7 @@ function SXM_build(G) {
     if (on) {
       api.holdPause = true
       var P = G.player
-      F.zoom = desert ? 2.2 : 1
+      F.zoom = desert ? (dw ? 3.5 : 2.2) : 1 // the desert world is ~3 km across: open on the base
       F.cx = P ? P.pos.x : F.cx
       F.cz = P ? P.pos.z : F.cz
       clampView()
@@ -273,7 +292,7 @@ function SXM_build(G) {
     return { x0: F.cx - span / 2, z0: F.cz - span / 2, span: span }
   }
   function clampView() {
-    F.zoom = Math.max(1, Math.min(desert ? 12 : 4, F.zoom))
+    F.zoom = Math.max(1, Math.min(desert ? (dw ? 30 : 12) : 4, F.zoom))
     var span = W.size / F.zoom
     F.cx = Math.max(W.x0 + span / 2, Math.min(W.x0 + W.size - span / 2, F.cx))
     F.cz = Math.max(W.z0 + span / 2, Math.min(W.z0 + W.size - span / 2, F.cz))

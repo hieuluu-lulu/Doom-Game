@@ -1264,9 +1264,23 @@ void main(){
   gl_FragColor = vec4(col, dot(col, vec3(0.299, 0.587, 0.114)));
 }`,
     iA = `${Js}
-uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uTime, uGrain, uSharpen, uFxaa;
+uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uTime, uGrain, uSharpen, uFxaa, uUp;
+// mod: 5-tap Catmull-Rom — a crisper upscale than bilinear when the scene was
+// rendered below the canvas size (uUp = canvas / render width)
+vec4 sampleCR(vec2 uv){
+  vec2 p = uv / uTexel, tc = floor(p - 0.5) + 0.5, f = p - tc;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f)), w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f)), w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 t0 = (tc - 1.0) * uTexel, t3 = (tc + 2.0) * uTexel, t12 = (tc + w2 / w12) * uTexel;
+  vec4 r = texture2D(tSrc, vec2(t12.x, t0.y)) * (w12.x * w0.y) + texture2D(tSrc, vec2(t0.x, t12.y)) * (w0.x * w12.y)
+    + texture2D(tSrc, t12) * (w12.x * w12.y) + texture2D(tSrc, vec2(t3.x, t12.y)) * (w3.x * w12.y)
+    + texture2D(tSrc, vec2(t12.x, t3.y)) * (w12.x * w3.y);
+  float ws = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  return max(r / ws, vec4(0.0));
+}
 void main(){
-  vec4 M = texture2D(tSrc, vUv);
+  vec4 M = uUp > 1.05 ? sampleCR(vUv) : texture2D(tSrc, vUv);
   vec3 col = M.rgb;
   vec4 NW = texture2D(tSrc, vUv + vec2(-1.0, -1.0) * uTexel), NE = texture2D(tSrc, vUv + vec2(1.0, -1.0) * uTexel);
   vec4 SW = texture2D(tSrc, vUv + vec2(-1.0, 1.0) * uTexel), SE = texture2D(tSrc, vUv + vec2(1.0, 1.0) * uTexel);
@@ -1554,6 +1568,7 @@ ${fe}`,
         uGrain: { value: g.grain },
         uSharpen: { value: g.sharpen },
         uFxaa: { value: 1 },
+        uUp: { value: 1 },
       }),
       ie = new Ye(),
       F = new Ye(),
@@ -1794,10 +1809,13 @@ ${fe}`,
       }
       {
         let be = K.uniforms;
+        // mod: the more the frame is stretched to the canvas, the more it is sharpened
+        let up = Math.max(1, ((i.domElement && i.domElement.width) || M.w) / M.w);
         (be.uTexel.value.set(1 / M.w, 1 / M.h),
           (be.uTime.value = ae),
           (be.uGrain.value = g.grain),
-          (be.uSharpen.value = g.sharpen),
+          (be.uUp.value = up),
+          (be.uSharpen.value = g.sharpen + Math.min(0.45, (up - 1) * 0.6)),
           l(K, null));
       }
     }
@@ -2234,8 +2252,11 @@ ${fe}`,
             ne = i.quality.scale || 1;
           if (_) {
             (n.setPixelRatio(X), n.setSize(ie, F, !1));
+            // mod: higher pixel budgets for high / ultra (was 2.3 M / 3.7 M px): a Retina
+            // screen rendered at ~62 % and looked soft; the dynamic scale above still
+            // steps the resolution down when a frame runs long
             let re = ne * S.scale,
-              $ = { low: 1e6, medium: 15e5, high: 23e5, ultra: 37e5 }[i.quality.name] || 23e5,
+              $ = { low: 1e6, medium: 15e5, high: 34e5, ultra: 62e5 }[i.quality.name] || 34e5,
               ue = ie * X * F * X * re * re;
             ue > $ && (re *= Math.sqrt($ / ue));
             let me = Math.max(16, Math.round(ie * X * re)),

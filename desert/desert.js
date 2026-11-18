@@ -642,7 +642,7 @@ async function SXD_level(i) {
   var hall = ab(t)
 
   // No perimeter walls: the berms and dunes are real ground now (SXD_TH,
-  // patched into the physics). Steep mesa faces and SXD_PLAY_R stop the player.
+  // patched into the physics). Steep mesa faces and SXD_PLAY_R (the map edge) stop the player.
   SXD_buildHeightGrid()
 
   // --- west checkpoint (player start) ---
@@ -961,6 +961,10 @@ async function SXD_level(i) {
 var SXD_MASK = { x0: -56, z0: -48, size: 96 }
 
 // Shared sand albedo/ripple GLSL (used by the ground and the far terrain).
+// sharpness knobs: texture anisotropy cap, sand grain contrast, distance haze
+// (start in m, density per m) of the far dunes and mesas
+var SXD_SHARP = { aniso: 16, grain: 0.32, hazeStart: 140, hazeK: 0.0014 }
+
 var SXD_SAND_COMMON = `
 float sdH1(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 vec2 sdH2(vec2 p){ vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
@@ -976,7 +980,7 @@ vec3 sdSand(vec2 xz, float grain, float detail, float loose, float dist, out vec
   vec3 sandA = vec3(0.50, 0.345, 0.205), sandB = vec3(0.40, 0.265, 0.155), sandC = vec3(0.57, 0.41, 0.26);
   vec3 alb = mix(sandB, sandA, smoothstep(0.25, 0.75, big * 0.7 + detail * 0.3));
   alb = mix(alb, sandC, loose * 0.45 * smoothstep(0.35, 0.8, sdVN(xz * 0.21 + 3.0)));
-  alb *= 0.88 + 0.24 * grain;
+  alb *= ${(1 - SXD_SHARP.grain / 2).toFixed(3)} + ${SXD_SHARP.grain.toFixed(3)} * grain;
   vec2 wd = normalize(vec2(${SXD_WIND[0].toFixed(2)}, ${SXD_WIND[1].toFixed(2)}));
   float warp = (sdVN(xz * 0.35) - 0.5) * 3.2 + (sdVN(xz * 1.1 + 5.0) - 0.5) * 0.9;
   float ph = dot(xz, wd) * 3.2 + warp;
@@ -1177,7 +1181,8 @@ function SXD_trackTexture(size, aniso) {
 
 async function SXD_ground(i) {
   var hi = (i.quality.tex || 512) >= 1024
-  var aniso = Math.min(8, i.renderer.capabilities.getMaxAnisotropy ? i.renderer.capabilities.getMaxAnisotropy() : 1)
+  // the GPU's full anisotropy (was capped at 8): the sand detail stays crisp at grazing angles
+  var aniso = Math.min(SXD_SHARP.aniso, i.renderer.capabilities.getMaxAnisotropy ? i.renderer.capabilities.getMaxAnisotropy() : 1)
   var mres = hi ? 1024 : 512
   var mask = N1(SXD_maskData(mres), mres, { repeat: false, aniso: 2 })
   var dres = hi ? 512 : 256
@@ -1315,7 +1320,7 @@ var SXD_TERRAIN_HAZE = `
   vec3 dir = normalize(vSdW - cameraPosition);
   float ts = clamp(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSdSun.xz)) * 0.5 + 0.5, 0.0, 1.0);
   vec3 haze = mix(uSdHazeA, uSdHazeB, pow(ts, 3.0));
-  float hz = 1.0 - exp(-max(dist - 90.0, 0.0) * 0.0019);
+  float hz = 1.0 - exp(-max(dist - ${SXD_SHARP.hazeStart.toFixed(1)}, 0.0) * ${SXD_SHARP.hazeK.toFixed(5)});
   hz *= 1.0 - 0.45 * smoothstep(20.0, 120.0, vSdW.y);
   gl_FragColor.rgb = mix(gl_FragColor.rgb, haze, clamp(hz, 0.0, 0.92));
 }
@@ -1334,6 +1339,64 @@ function SXD_basinSd(x, z) {
 var SXD_MESAS = [
   [250, -190, 110, 62], [-330, 150, 150, 52], [60, 430, 120, 80], [-140, -390, 95, 58], [430, 140, 140, 46], [-470, -150, 120, 72], [300, 380, 90, 40], [-420, 380, 140, 66],
 ]
+
+// Mesa tracks: a straight embankment ramp per mesa, from the plain up to the
+// caprock at `grade` (0.32 ≈ 18°: the Sandcat and, slower, the Rhino make it),
+// `half` m of flat bed each side of the axis, then `bank` m drop per m. The
+// direction is picked once (SXD_mesaRamps): clear of the basin, the other
+// mesas, the outposts and the highway, and as much towards the basin as that
+// allows, so it is in sight from the base.
+var SXD_RAMP_TUNE = { grade: 0.32, half: 4, bank: 1.5, dirs: 36 }
+var SXD_RAMPS = null
+function SXD_polyDist(x, z, P) {
+  var best = Infinity
+  for (var k = 0; k + 1 < P.length; k++) {
+    var ax = P[k][0], az = P[k][1], bx = P[k + 1][0] - ax, bz = P[k + 1][1] - az
+    var t = Math.max(0, Math.min(1, ((x - ax) * bx + (z - az) * bz) / (bx * bx + bz * bz)))
+    best = Math.min(best, Math.hypot(x - ax - bx * t, z - az - bz * t))
+  }
+  return best
+}
+function SXD_mesaRamps() {
+  if (SXD_RAMPS) return SXD_RAMPS
+  var B = SXD_BOUND, bcx = (B.x0 + B.x1) / 2, bcz = (B.z0 + B.z1) / 2, T = SXD_RAMP_TUNE
+  var sites = typeof SXO_SITES !== 'undefined' ? SXO_SITES : []
+  SXD_RAMPS = SXD_MESAS.map(function (m, k) {
+    var toC = Math.atan2(bcz - m[1], bcx - m[0]), best = null
+    for (var c = 0; c < T.dirs; c++) {
+      var a = (c / T.dirs) * Math.PI * 2, ax = Math.cos(a), az = Math.sin(a)
+      var edge = m[2] * (1 + (SXD_fbm2(a * 2.2 + k * 3.3, k * 1.7, 4) - 0.5) * 0.55)
+      var s0 = edge - 4, s1 = edge + m[3] / T.grade, bad = 0
+      for (var s = edge; s <= s1; s += 8)
+        for (var o = -1; o <= 1; o++) {
+          var x = m[0] + ax * s - az * o * 10, z = m[1] + az * s + ax * o * 10
+          if (SXD_basinSd(x, z) < 25) bad++
+          for (var q = 0; q < SXD_MESAS.length; q++) if (q !== k && Math.hypot(x - SXD_MESAS[q][0], z - SXD_MESAS[q][1]) < SXD_MESAS[q][2] * 1.3 + 10) bad++
+          for (var p = 0; p < sites.length; p++) if (Math.hypot(x - sites[p].x, z - sites[p].z) < sites[p].r + 45) bad++
+          if (SXD_polyDist(x, z, SXD_ROAD_PTS) < 40) bad++
+        }
+      var score = Math.cos(a - toC) - bad * 10
+      if (!best || score > best.score) best = { score: score, ax: ax, az: az, s0: s0, s1: s1, bad: bad }
+    }
+    return { cx: m[0], cz: m[1], ax: best.ax, az: best.az, s0: best.s0, s1: best.s1, top: m[3], bad: best.bad }
+  })
+  return SXD_RAMPS
+}
+// the embankment falls away at `bank` sideways and past the caprock end too,
+// so it always meets the ground (no wall where it is cut off)
+function SXD_rampLift(x, z, h) {
+  var R = SXD_mesaRamps(), T = SXD_RAMP_TUNE
+  for (var k = 0; k < R.length; k++) {
+    var r = R[k], dx = x - r.cx, dz = z - r.cz, fall = r.top / T.bank
+    var s = dx * r.ax + dz * r.az
+    if (s < r.s0 - fall || s > r.s1) continue
+    var t = Math.abs(-dx * r.az + dz * r.ax)
+    if (t > T.half + fall) continue
+    var rh = r.top * Math.max(0, Math.min(1, (r.s1 - s) / (r.s1 - r.s0))) - Math.max(0, t - T.half) * T.bank - Math.max(0, r.s0 - s) * T.bank
+    if (rh > h) h = rh
+  }
+  return h
+}
 
 function SXD_terrainBase(x, z) {
   var u = SXD_basinSd(x, z)
@@ -1370,6 +1433,8 @@ function SXD_terrainBase(x, z) {
     }
     h = Math.max(h, mh)
   }
+  // a dirt track up each mesa, so vehicles can drive onto the caprock
+  h = SXD_rampLift(x, z, h)
   // outposts (outposts feature): carve a flat bowl, floor at y = 0
   if (typeof SXO_SITES !== 'undefined') {
     for (var q = 0; q < SXO_SITES.length; q++) {
@@ -1539,19 +1604,25 @@ function SXD_roadPoles() {
 
 // The road ribbon (one mesh) + the poles/wires (into the backdrop builder).
 // farY(x, z) = height of the coarse far terrain mesh, for the stretch past the grid.
-async function SXD_roadBuild(i, root, bld, farY) {
+// hideU: the far mesh's cut-away circle (SXD_streamer). Past the baked grid a
+// vertex has two heights: on the 2 m terrain (aFine, used inside the circle,
+// where the streamed tiles are drawn) and lifted over the coarse far mesh
+// (position.y, used beyond it).
+async function SXD_roadBuild(i, root, bld, farY, hideU) {
   var R = SXD_roadData(), T = SXD_ROAD_TUNE
   var offs = [-T.half, -T.half / 2, 0, T.half / 2, T.half], nO = offs.length
-  var g = SXD_HG, lim = 594
-  var pos = [], uv = [], idx = [], rows = 0
+  var g = SXD_HG, lim = 594, wl = SXD_WORLD_R - 4
+  var pos = [], fine = [], uv = [], idx = [], rows = 0
   for (var k = 0; k < R.n; k++) {
     var x = R.x[k], z = R.z[k], nx = R.tz[k], nz = -R.tx[k]
-    var near = Math.abs(x - g.cx) < lim && Math.abs(z - g.cz) < lim
-    if (!near && k % 4 && k !== R.n - 1) continue // 8 m rows out on the far terrain
+    var near = Math.abs(x - g.cx) < wl && Math.abs(z - g.cz) < wl
+    if (!near && k % 4 && k !== R.n - 1) continue // 8 m rows out past the drivable world
     for (var o = 0; o < nO; o++) {
       var px = x + nx * offs[o], pz = z + nz * offs[o]
       var inG = Math.abs(px - g.cx) < lim && Math.abs(pz - g.cz) < lim
-      pos.push(px, inG ? SXD_heightAt(px, pz) + 0.03 : Math.max(farY(px, pz), SXD_terrainHeight(px, pz)) + 0.35, pz)
+      var fy = (inG ? SXD_heightAt(px, pz) : SXD_terrainHeight(px, pz)) + 0.03
+      pos.push(px, inG ? fy : Math.max(farY(px, pz), fy - 0.03) + 0.35, pz)
+      fine.push(fy)
       uv.push((offs[o] + T.half) / (2 * T.half), (k * T.step) / T.tile)
     }
     if (rows) for (var o2 = 0; o2 < nO - 1; o2++) { var a = (rows - 1) * nO + o2, b = a + nO; idx.push(a, b, a + 1, a + 1, b, b + 1) }
@@ -1559,6 +1630,7 @@ async function SXD_roadBuild(i, root, bld, farY) {
   }
   var geo = new lt.BufferGeometry()
   geo.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+  geo.setAttribute('aFine', new lt.Float32BufferAttribute(fine, 1))
   geo.setAttribute('uv', new lt.Float32BufferAttribute(uv, 2))
   geo.setIndex(idx)
   geo.computeVertexNormals()
@@ -1570,7 +1642,7 @@ async function SXD_roadBuild(i, root, bld, farY) {
     tex.colorSpace = lt.SRGBColorSpace
     tex.wrapS = lt.ClampToEdgeWrapping
     tex.wrapT = lt.RepeatWrapping
-    tex.anisotropy = i.renderer && i.renderer.capabilities ? Math.min(8, i.renderer.capabilities.getMaxAnisotropy()) : 4
+    tex.anisotropy = i.renderer && i.renderer.capabilities ? Math.min(SXD_SHARP.aniso, i.renderer.capabilities.getMaxAnisotropy()) : 4
     tex.needsUpdate = true
   } catch (e) {
     console.error('[desert] road texture', e)
@@ -1581,9 +1653,15 @@ async function SXD_roadBuild(i, root, bld, farY) {
   var hzA = en.horizonAway.clone().multiplyScalar(1.05), hzB = en.horizon.clone().multiplyScalar(0.95)
   tu.uSdHazeA.value.set(hzA.r, hzA.g, hzA.b)
   tu.uSdHazeB.value.set(hzB.r, hzB.g, hzB.b)
+  if (hideU) Object.assign(tu, hideU)
   mat.onBeforeCompile = function (sh) {
     Object.assign(sh.uniforms, tu)
-    sh.vertexShader = 'varying vec3 vSdW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vSdW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    // inside the far mesh's cut-away circle the road lies on the streamed 2 m terrain
+    var pick = hideU
+      ? '\n  { vec2 wq = abs(transformed.xz - uSdWorldC); if (max(wq.x, wq.y) < uSdHide.w && length(transformed.xz - uSdHide.xy) < uSdHide.z) transformed.y = aFine; }'
+      : ''
+    sh.vertexShader = 'varying vec3 vSdW;\n' + (hideU ? 'attribute float aFine; uniform vec4 uSdHide; uniform vec2 uSdWorldC;\n' : '') +
+      sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + pick + '\n  vSdW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vSdW;\nuniform vec3 uSdHazeA, uSdHazeB, uSdSun;\nvec2 sdRoadN;\n' + SXD_SAND_COMMON)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize(normal + mat3(viewMatrix) * vec3(sdRoadN.x, 0.0, sdRoadN.y));')
@@ -1720,13 +1798,128 @@ function SXD_buildChunks(mat) {
   var chunks = []
   for (var cj = 0; cj < nc; cj++)
     for (var ci = 0; ci < nc; ci++) {
-      var hi = build(ci, cj, 1), lo = build(ci, cj, 4)
+      var hi = build(ci, cj, 1), lo = build(ci, cj, 5) // 10 m: 50 cells / 5 (a stride of 4 left 12.5 cells and a garbled mesh)
       lo.visible = false
       group.add(hi, lo)
       var ccx = g.x0 + (ci + 0.5) * CH * step, ccz = g.z0 + (cj + 0.5) * CH * step
       chunks.push({ hi: hi, lo: lo, x: ccx, z: ccz, near: true, road: SXD_roadNearBox(ccx, ccz, (CH * step) / 2 + 12) })
     }
   return { group: group, chunks: chunks, half: (nc * CH * step) / 2 }
+}
+
+// Streamed terrain past the baked grid: every 100 m tile (SXD_tile) within
+// SXD_STREAM.r of the camera and inside the world gets a mesh — 2 m cells
+// within `hi`, 10 m beyond (and on the far side of `hi` the 2 m one is
+// dropped) — a few per frame, nearest first; tiles behind `drop` are freed.
+// hide (the far mesh's uSdHide) gets the radius they fully cover.
+var SXD_STREAM = { r: 560, hi: 230, drop: 720, hiPerFrame: 1, loPerFrame: 3 }
+function SXD_streamer(root, mat, hide) {
+  var g = SXD_HG, T = SXD_TILE, step = g.step, size = T * step
+  var group = new lt.Group()
+  group.name = 'desert-terrain-stream'
+  root.add(group)
+  var live = new Map()
+  // heights with a 1-sample border, for the normals across the tile edge
+  function block(ti, tj, stride) {
+    var cells = T / stride, n = cells + 3, out = new Float32Array(n * n)
+    var x0 = g.x0 + ti * size - stride * step, z0 = g.z0 + tj * size - stride * step
+    var t = stride === 1 ? SXD_tile(ti, tj) : null
+    for (var j = 0; j < n; j++)
+      for (var k = 0; k < n; k++) {
+        var inner = t && j >= 1 && k >= 1 && j <= cells + 1 && k <= cells + 1
+        out[j * n + k] = inner ? t.d[(j - 1) * (T + 1) + (k - 1)] : SXD_terrainHeight(x0 + k * stride * step, z0 + j * stride * step)
+      }
+    return { h: out, n: n, cells: cells, x0: x0, z0: z0, d: stride * step }
+  }
+  function build(ti, tj, stride) {
+    var B = block(ti, tj, stride), n = B.n, cells = B.cells, side = cells + 1
+    var pos = [], nor = [], idx = []
+    var vert = function (k, j, drop) {
+      var h = B.h[j * n + k]
+      pos.push(B.x0 + k * B.d, (h > 0.15 ? h : h - 0.12) - (drop || 0), B.z0 + j * B.d)
+      var dx = (B.h[j * n + k + 1] - B.h[j * n + k - 1]) / (2 * B.d), dz = (B.h[(j + 1) * n + k] - B.h[(j - 1) * n + k]) / (2 * B.d)
+      var l = Math.hypot(dx, 1, dz)
+      nor.push(-dx / l, 1 / l, -dz / l)
+      return pos.length / 3 - 1
+    }
+    for (var j = 1; j <= cells + 1; j++) for (var k = 1; k <= cells + 1; k++) vert(k, j)
+    for (var j2 = 0; j2 < cells; j2++)
+      for (var i2 = 0; i2 < cells; i2++) {
+        var a = j2 * side + i2, b = a + side, c = a + 1, d = b + 1
+        idx.push(a, b, c, c, b, d)
+      }
+    // skirts down each edge, as SXD_buildChunks
+    var edge = function (list) {
+      var pt = -1, pl = -1
+      for (var q = 0; q < list.length; q++) {
+        var top = list[q][0], low = vert(list[q][1], list[q][2], 4)
+        if (pt >= 0) idx.push(pt, pl, top, top, pl, low, pt, top, pl, top, low, pl)
+        pt = top; pl = low
+      }
+    }
+    var e0 = [], e1 = [], e2 = [], e3 = []
+    for (var q = 0; q <= cells; q++) {
+      e0.push([q, q + 1, 1]); e1.push([cells * side + q, q + 1, cells + 1])
+      e2.push([q * side, 1, q + 1]); e3.push([q * side + cells, cells + 1, q + 1])
+    }
+    edge(e0); edge(e1); edge(e2); edge(e3)
+    var geo = new lt.BufferGeometry()
+    geo.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+    geo.setAttribute('normal', new lt.Float32BufferAttribute(nor, 3))
+    geo.setIndex(idx)
+    geo.computeBoundingSphere()
+    var m = new lt.Mesh(geo, mat)
+    m.castShadow = true
+    m.receiveShadow = true
+    m.matrixAutoUpdate = false
+    group.add(m)
+    return m
+  }
+  function free(e) {
+    ;[e.hi, e.lo].forEach(function (m) { if (m) { group.remove(m); m.geometry.dispose() } })
+  }
+  var S = SXD_STREAM, want = []
+  return {
+    group: group,
+    live: live,
+    update: function (cam) {
+      var ci = Math.floor((cam.x - g.x0) / size), cj = Math.floor((cam.z - g.z0) / size)
+      var rt = Math.ceil(S.r / size) + 1, wr = SXD_WORLD_R, half = size / 2
+      // tiles that should exist: in reach, not baked, overlapping the world square
+      want.length = 0
+      for (var dj = -rt; dj <= rt; dj++)
+        for (var di = -rt; di <= rt; di++) {
+          var ti = ci + di, tj = cj + dj
+          if (SXD_isBaked(ti, tj)) continue
+          var tx = g.x0 + (ti + 0.5) * size, tz = g.z0 + (tj + 0.5) * size
+          if (Math.abs(tx - g.cx) > wr + half || Math.abs(tz - g.cz) > wr + half) continue
+          var d = Math.hypot(tx - cam.x, tz - cam.z)
+          if (d - half * 1.42 > S.r) continue
+          want.push({ ti: ti, tj: tj, d: d, k: SXD_tileKey(ti, tj) })
+        }
+      want.sort(function (a, b) { return a.d - b.d })
+      var hiLeft = S.hiPerFrame, loLeft = S.loPerFrame, cover = S.r
+      for (var w = 0; w < want.length; w++) {
+        var t = want[w], e = live.get(t.k)
+        if (!e) { e = { ti: t.ti, tj: t.tj, hi: null, lo: null, d: t.d }; live.set(t.k, e) }
+        e.d = t.d
+        if (!e.lo && loLeft > 0) { e.lo = build(t.ti, t.tj, 5); loLeft-- }
+        var nearT = t.d < S.hi
+        if (nearT && !e.hi && hiLeft > 0) { e.hi = build(t.ti, t.tj, 1); hiLeft-- }
+        if (!nearT && e.hi && t.d > S.hi + 60) { group.remove(e.hi); e.hi.geometry.dispose(); e.hi = null }
+        var showHi = !!e.hi && nearT
+        if (e.hi) e.hi.visible = showHi
+        if (e.lo) e.lo.visible = !showHi
+        if (!e.lo) cover = Math.min(cover, t.d - half * 1.42)
+      }
+      // tiles left far behind
+      live.forEach(function (e, k) {
+        var tx = g.x0 + (e.ti + 0.5) * size, tz = g.z0 + (e.tj + 0.5) * size
+        if (Math.hypot(tx - cam.x, tz - cam.z) > S.drop) { free(e); live.delete(k) }
+      })
+      hide.value.set(cam.x, cam.z, Math.max(0, cover - 8), wr)
+    },
+  }
 }
 
 /* ================================================= WALKABLE TERRAIN ===== */
@@ -1737,7 +1930,7 @@ function SXD_buildChunks(mat) {
 // bilinearly; the near terrain mesh (SXD_buildChunks) uses the same samples.
 var SXD_TH = null
 var SXD_HG = null
-var SXD_PLAY_R = 560 // metres from the basin centre the player may roam (whole map)
+var SXD_PLAY_R = 1500 // metres from the basin centre the player may roam: the whole map (was 560, the baked grid)
 var SXD_MAX_SLOPE = 1.05 // rise/run (~46°); steeper faces (mesa cliffs) block
 
 function SXD_buildHeightGrid() {
@@ -1758,22 +1951,56 @@ function SXD_buildHeightGrid() {
   console.log('[desert] walkable terrain ' + n + '×' + n + ' in ' + Math.round(performance.now() - t0) + 'ms, peak ' + hmax.toFixed(1) + 'm')
 }
 
-// Ground height at (x, z); outside the baked grid it is a flat floor (only
+// Ground height at (x, z): the baked grid (±600 m), then the 100 m tiles of the
+// same 2 m lattice out to SXD_WORLD_R (SXD_tile), then a flat floor (only
 // reachable by long rays, which stop there).
 function SXD_heightAt(x, z) {
   var g = SXD_HG
   var fx = (x - g.x0) / g.step, fz = (z - g.z0) / g.step
-  if (fx < 0 || fz < 0 || fx >= g.n - 1 || fz >= g.n - 1) return 0
+  if (fx < 0 || fz < 0 || fx >= g.n - 1 || fz >= g.n - 1) return SXD_heightOut(x, z, fx, fz)
   var i = fx | 0, j = fz | 0, tx = fx - i, tz = fz - j, n = g.n, d = g.data, k = j * n + i
   var a = d[k] + (d[k + 1] - d[k]) * tx
   var b = d[k + n] + (d[k + n + 1] - d[k + n]) * tx
   return a + (b - a) * tz
 }
 
-function SXD_inGrid(x, z) {
-  var g = SXD_HG
-  return x > g.x0 && z > g.z0 && x < g.x0 + (g.n - 1) * g.step && z < g.z0 + (g.n - 1) * g.step
+// ---- the terrain past the baked grid. The whole map is drivable: out to
+// SXD_WORLD_R the ground comes in 100 m tiles (51×51 samples, the baked grid's
+// own 2 m lattice) computed from SXD_terrainHeight the first time anything
+// asks — wheels, feet, bullets, the streamed mesh round the camera
+// (SXD_streamer). The baked grid itself is tiles 0..11 on both axes.
+var SXD_WORLD_R = 1560 // half-size of the square that has terrain detail (≥ SXD_PLAY_R + margin)
+var SXD_TILE = 50 // cells per tile side
+var SXD_TILES = new Map()
+function SXD_tileKey(ti, tj) { return (ti + 1024) * 2048 + (tj + 1024) }
+function SXD_isBaked(ti, tj) { var m = (SXD_HG.n - 1) / SXD_TILE; return ti >= 0 && tj >= 0 && ti < m && tj < m }
+function SXD_tile(ti, tj) {
+  var key = SXD_tileKey(ti, tj)
+  var t = SXD_TILES.get(key)
+  if (t) return t
+  var g = SXD_HG, n = SXD_TILE + 1, d = new Float32Array(n * n)
+  var x0 = g.x0 + ti * SXD_TILE * g.step, z0 = g.z0 + tj * SXD_TILE * g.step
+  for (var j = 0; j < n; j++) for (var k = 0; k < n; k++) d[j * n + k] = SXD_terrainHeight(x0 + k * g.step, z0 + j * g.step)
+  t = { ti: ti, tj: tj, x0: x0, z0: z0, d: d }
+  SXD_TILES.set(key, t)
+  return t
 }
+function SXD_inWorld(x, z) {
+  var g = SXD_HG
+  return Math.abs(x - g.cx) < SXD_WORLD_R && Math.abs(z - g.cz) < SXD_WORLD_R
+}
+function SXD_heightOut(x, z, fx, fz) {
+  if (!SXD_inWorld(x, z)) return 0
+  var ti = Math.floor(fx / SXD_TILE), tj = Math.floor(fz / SXD_TILE)
+  var t = SXD_tile(ti, tj), lx = fx - ti * SXD_TILE, lz = fz - tj * SXD_TILE
+  var i = Math.min(SXD_TILE - 1, lx | 0), j = Math.min(SXD_TILE - 1, lz | 0), tx = lx - i, tz = lz - j, n = SXD_TILE + 1, d = t.d, k = j * n + i
+  var a = d[k] + (d[k + 1] - d[k]) * tx
+  var b = d[k + n] + (d[k + n + 1] - d[k + n]) * tx
+  return a + (b - a) * tz
+}
+
+// rays march the terrain anywhere it has detail (was: the baked grid only)
+function SXD_inGrid(x, z) { return SXD_inWorld(x, z) }
 
 function SXD_grad(x, z, out) {
   var e = 0.35
@@ -1854,8 +2081,9 @@ async function SXD_backdrop(i) {
   var B = SXD_BOUND
   var cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2
 
-  // ---- terrain: polar grid from the basin edge out to 900 m ----
-  var NT = 360, NR = 96
+  // ---- terrain: polar grid from the basin edge out to ~2.5 km (the play
+  // radius + the camera's 900 m far plane, so the edge never shows) ----
+  var NT = 360, NR = 108
   var ring = []
   for (var k = 0; k <= NR; k++) ring.push(6 * (Math.pow(1.0575, k) - 1))
   var pos = new Float32Array((NT + 1) * (NR + 1) * 3)
@@ -1911,15 +2139,36 @@ async function SXD_backdrop(i) {
   mat.customProgramCacheKey = function () {
     return 'sxd-terrain-1'
   }
-  var terrain = new lt.Mesh(geo, mat)
+  // the coarse far mesh: the same look, but cut away (discard) inside the
+  // circle the streamed 2 m tiles fully cover round the camera (SXD_streamer
+  // keeps uSdHide = centre x/z, radius, world half-size up to date), so the
+  // driveable detail is what shows there. It casts no shadow: the shadow box
+  // round the camera always sits on the near / streamed terrain, and a far
+  // facet poking above them would shade them.
+  var farMat = mat.clone()
+  farMat.name = 'desert_terrain_far'
+  var hideU = { uSdHide: { value: new lt.Vector4(0, 0, 0, SXD_WORLD_R) }, uSdWorldC: { value: new lt.Vector2(SXD_HG ? SXD_HG.cx : cx, SXD_HG ? SXD_HG.cz : cz) } }
+  farMat.onBeforeCompile = function (sh) {
+    mat.onBeforeCompile(sh)
+    Object.assign(sh.uniforms, hideU)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec4 uSdHide; uniform vec2 uSdWorldC;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  { vec2 wq = abs(vSdW.xz - uSdWorldC); if (max(wq.x, wq.y) < uSdHide.w && length(vSdW.xz - uSdHide.xy) < uSdHide.z) discard; }')
+  }
+  farMat.customProgramCacheKey = function () {
+    return 'sxd-terrain-far-1'
+  }
+  var terrain = new lt.Mesh(geo, farMat)
   terrain.name = 'desert-terrain'
-  terrain.castShadow = true
+  terrain.castShadow = false
   terrain.receiveShadow = true
   terrain.matrixAutoUpdate = false
   terrain.updateMatrix()
   root.add(terrain)
   var near = SXD_HG ? SXD_buildChunks(mat) : null
   if (near) root.add(near.group)
+  var stream = SXD_HG ? SXD_streamer(root, mat, hideU.uSdHide) : null
+  window.__sxdWorld = { ramps: SXD_mesaRamps(), h: SXD_heightAt, tiles: SXD_TILES, stream: stream, hide: hideU.uSdHide.value, playR: SXD_PLAY_R, worldR: SXD_WORLD_R } // tests
   // the sun's shadow box was fitted to the basin; out on the dunes it follows
   // the camera (same size, so the PCSS constants stay valid)
   var sun = i.render && i.render.sun
@@ -2034,7 +2283,7 @@ async function SXD_backdrop(i) {
   var road = null
   if (SXD_HG) {
     try {
-      road = await SXD_roadBuild(i, root, bld, farY)
+      road = await SXD_roadBuild(i, root, bld, farY, hideU)
     } catch (e) {
       console.error('[desert] highway failed', e)
     }
@@ -2057,9 +2306,10 @@ async function SXD_backdrop(i) {
       lamps.uTime.value = tt
       var cam = i.camera && i.camera.position
       if (!cam) return
+      if (stream) stream.update(cam)
       if (near) {
         for (var c = 0; c < near.chunks.length; c++) {
-          // chunks the highway crosses keep the 2 m mesh (the 8 m one would bury the road bed)
+          // chunks the highway crosses keep the 2 m mesh (the 10 m one would bury the road bed)
           var ch = near.chunks[c], d = Math.hypot(ch.x - cam.x, ch.z - cam.z), want = d < 200 || (ch.road && d < 700)
           if (want !== ch.near) { ch.near = want; ch.hi.visible = want; ch.lo.visible = !want }
         }

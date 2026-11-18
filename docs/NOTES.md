@@ -475,9 +475,26 @@ Map đấu đội nhỏ, bố cục tự thiết kế (không chép map nào c�
 
 Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi tiết xem trong `desert/`.
 
+- **Độ nét** (sửa vì sa mạc trông nhoè, nhất là trên màn Retina):
+  - **Nguyên nhân chính:** game giới hạn số điểm ảnh render theo mức chất lượng (`resize()` trong `game/js/10_game.js`). Trên MacBook Retina (canvas 3024×1964), High chỉ render 1882×1222 (62 %) rồi phóng to, Ultra 79 %.
+  - **Nâng giới hạn:** High 2,3 → 3,4 triệu điểm ảnh, Ultra 3,7 → 6,2 triệu. Phần tự hạ độ phân giải sẵn có của game vẫn hạ khi một khung hình quá 21,5 ms (dưới khoảng 46 FPS), nên máy yếu không bị tụt FPS. Đo trên Retina giả lập ở sa mạc: High render 2288×1486 (76 %), FPS ngang bản cũ trong cùng lần đo (khoảng 48); Ultra lúc đầu render đủ độ phân giải ở 30 FPS, rồi tự hạ còn 70 % để giữ 48 FPS.
+  - **Phóng to sắc hơn:** pass cuối (`iA`) dùng nội suy Catmull-Rom 5 mẫu thay cho nội suy tuyến tính khi ảnh render nhỏ hơn canvas (`uUp` = bề ngang canvas / bề ngang ảnh render). Mức làm nét tăng theo tỉ lệ phóng: 0,3 + 0,6·(uUp − 1), tối đa thêm 0,45. Không phóng to (màn thường, DPR 1) thì như cũ.
+  - **Mặt đất sa mạc** (`SXD_SHARP` trong `desert/desert.js`): lọc dị hướng tối đa 16 (trước 8) cho texture chi tiết, vết bánh xe và đường nhựa; hạt cát tương phản hơn (±16 % thay ±12 %); sương bụi xa bắt đầu từ 140 m (trước 90 m) và mỏng hơn (0,0014/m thay 0,0019/m), nên đồi cát và mesa ở xa rõ hơn.
+  - **Motion blur** (nhoè khi xoay camera, có sẵn ở High/Ultra): thêm công tắc trong Settings (`modes/modes.js`), **mặc định tắt** cho hình rõ khi xoay; bật lại thì dùng đúng giá trị của mức chất lượng.
+  - So ảnh cắt 1:1 cùng chỗ (Retina giả lập): khung tháp khoan, mép máy bơm dầu và hạt cát trên đồi rõ hẳn so với bản cũ.
+
 - **Đi lại trên địa hình:** đê cát và đồi cát leo được. Vật lý của game (đi lại, đạn, lựu đạn, tầm nhìn của địch, đồ rơi) dùng độ cao địa hình `SXD_TH`. Độ cao này được nướng sẵn thành lưới 1,25 m từ `SXD_terrainHeight` lúc tải map.
-- **Vùng được đi:** toàn map, bán kính `SXD_PLAY_R` = 560 m quanh trạm bơm. Đi tới gần mép thì game cảnh báo. Sườn dốc hơn `SXD_MAX_SLOPE` (khoảng 46°, ví dụ vách núi mesa) không leo được.
-- **Dữ liệu độ cao:** lưới 2 m phủ ±600 m. Mặt đất gần người chơi được dựng thành các khối 100 m từ chính lưới này, nên phần nhìn thấy khớp với phần va chạm. Có 2 mức chi tiết, đổi ở khoảng cách 200 m.
+- **Vùng được đi:** cả map, bán kính `SXD_PLAY_R` = 1500 m quanh trạm bơm (trước đây 560 m). Đi bộ hay lái xe đều tới được mép; gần mép (còn 22 m) thì game cảnh báo, tới mép thì bị chặn lại. Đi bộ không leo được sườn dốc hơn `SXD_MAX_SLOPE` (khoảng 46°, ví dụ vách núi mesa).
+- **Dữ liệu độ cao:** lưới 2 m phủ ±600 m, tạo sẵn lúc tải map (khoảng 0,4 s). Mặt đất gần người chơi được dựng thành các khối 100 m từ chính lưới này, nên phần nhìn thấy khớp với phần va chạm. Có 2 mức chi tiết, đổi ở khoảng cách 200 m. Mức xa dùng ô 10 m (trước đây bước 4 trên 50 ô lưới ra 12,5 ô, nên khối xa bị dựng lệch tam giác).
+- **Ngoài ±600 m (cả map lái được):**
+  - **Độ cao:** cùng lưới 2 m, chia thành ô 100 m (`SXD_tile`), mỗi ô tính từ `SXD_terrainHeight` lần đầu có thứ cần tới (bánh xe, chân, đạn, phần hiển thị), khoảng 3 ms một ô, rồi giữ lại. Phủ tới `SXD_WORLD_R` = 1560 m; xa hơn là mặt phẳng.
+  - **Hiển thị** (`SXD_streamer`): mọi ô trong 560 m quanh camera có mesh riêng (2 m trong 230 m, 10 m xa hơn), dựng dần mỗi khung hình 1 ô 2 m + 3 ô 10 m, ô gần trước; ô xa quá 720 m thì bỏ. Vòng địa hình thô (lưới cực) bị cắt bỏ (discard) trong vòng tròn mà các ô đã phủ kín (`uSdHide`), nên chỗ đó hiện đúng mặt đất chi tiết, khớp với phần va chạm. Vòng thô giờ không đổ bóng (nó có thể nhô lên trên mặt chi tiết và phủ bóng sai).
+  - **Vòng địa hình thô** nới ra khoảng 2,5 km (`NR` 96 → 108), tức mép map 1,5 km cộng tầm nhìn 900 m của camera, nên đứng ở mép map cũng không thấy hết đất.
+  - **Đường cao tốc** ngoài ±600 m: mỗi đỉnh có 2 độ cao, trên mặt chi tiết (`aFine`, dùng trong vòng tròn chi tiết) và nhấc lên trên vòng thô (dùng ngoài vòng); shader đỉnh chọn theo vị trí.
+  - **Minimap** phủ cả map (`SXD_WORLD_R`, ảnh 2048 px, khoảng 1,5 m/điểm ảnh, lưới vạch 500 m). Ngoài lưới tạo sẵn, độ cao lấy thưa mỗi 4 điểm ảnh rồi nội suy (vẽ mất khoảng 0,3 s lúc tải). Mở bản đồ lớn thì phóng sẵn 3,5×, phóng tối đa 30×.
+  - **Đã thử:** đứng ở cách trạm 1,2 km thì đứng đúng trên mặt đất, 108 ô được dựng (15 ô 2 m), vòng chi tiết phủ đủ 552 m, 60 FPS; nhìn 4 hướng không có lỗ hay đường nối. Lái Sandcat (bật tăng tốc) ra mép: dừng ở 1,48 km rồi bị đẩy lại.
+- **Đường lên núi** (`SXD_mesaRamps`, `SXD_rampLift`): mỗi núi mesa có một con dốc đắp thẳng từ mặt đất lên mặt đỉnh, dốc 0,32 (khoảng 18°), mặt dốc rộng 8 m, hai bên đổ xuống 1,5 m mỗi mét và phía đỉnh cũng đổ xuống, nên con dốc luôn gặp mặt đất, không thành bức tường. Hướng dốc chọn một lần trong 36 hướng: tránh khu căn cứ, các núi khác, các cứ điểm và đường cao tốc, rồi ưu tiên hướng nhìn về căn cứ. Cả 8 con dốc đều tìm được hướng không vướng gì. Con dốc nằm trong `SXD_terrainHeight`, nên va chạm, hiển thị, minimap và vòng thô đều thấy giống nhau.
+  - **Đã thử:** lái tự động (bám trục con dốc) lên núi phía tây (cao 72 m): Sandcat lên tới đỉnh sau khoảng 12 giây, Rhino khoảng 17 giây.
 - **Bóng mặt trời:** khi ra xa trạm, vùng đổ bóng đi theo người chơi.
 - **Địch:** robot chó vẫn tìm đường trong khu trạm. Drone thì bay theo người chơi.
 - **Quốc lộ (`SXD_ROAD_PTS`):**
@@ -579,8 +596,9 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 - Test leo đồi cát dốc 24–25° từ chỗ đứng yên trong 8 giây:
   - Buggy lên tới đỉnh (14–17 m) cả khi giữ W lẫn Shift, nhưng giữ Shift đi được gần gấp đôi quãng đường.
   - Rhino giữ Shift lên 15–17 m ở 72 km/h; giữ W chỉ bò lên ở 22–28 km/h.
-- Vách đá của các mesa (dốc khoảng 60°) thì không xe nào leo được.
-- **Mép map:** xe bị chặn ở bán kính 554 m quanh tâm map sa mạc, sát giới hạn đi bộ 560 m (`SXD_PLAY_R`). Trước đây xe tăng tốc leo được dãy núi viền rồi ra ngoài vùng có mặt đất và kẹt lơ lửng; xe nào đã lỡ ra ngoài sẽ được kéo về mép trong.
+- Vách đá của các mesa (dốc khoảng 60°) thì không xe nào leo được; lên đỉnh mesa bằng con dốc đắp sẵn (xem phần desert, "Đường lên núi").
+- **Hỗ trợ leo dốc** (`SXC_HILL` = 0,8 trong `cars/cars.js`): khi ga mà mũi xe đang chúc lên, lực kéo cộng thêm 80 % thành phần trọng lực kéo xe tụt xuống (như gài số thấp), vẫn bị giới hạn bởi độ bám của lốp. Nhờ vậy Rhino giữ W cũng leo được đồi cát và con dốc lên núi, không chỉ khi bật tăng tốc.
+- **Mép map:** xe bị chặn ở `SXD_PLAY_R` − 6 m (giờ 1494 m quanh tâm map sa mạc; trước đây 554 m). Mặt đất có tới `SXD_WORLD_R` = 1560 m, nên xe không bao giờ ra tới chỗ không có đất.
 - Chỉnh: `boostMul` (tốc độ tối đa) và `boostAccel` (lực kéo) trong `SXC_SPECS`.
 
 ### Xe Sandcat: model Buggy_2
@@ -687,7 +705,8 @@ Nút MODE và độ khó chỉ áp dụng khi chơi một mình; trong phòng nh
   - Hết đợt: nghỉ 15 giây, hồi 35 máu, đạn mỗi súng đang có được nạp đủ 2 băng dự trữ.
   - Robot còn sót sau 150 giây mà ở xa hơn 60 m thì không tính nữa (tránh kẹt đợt vì robot mắc kẹt).
   - Dòng nhiệm vụ trên HUD: "Survival · wave 3 · 7 machines left" / "Wave 3 cleared · next wave in under 15 s". Đồng hồ nghỉ nhảy theo bước 5 giây, vì mỗi lần chữ đổi HUD gõ lại và nháy cả dòng (đếm từng giây thì dòng không bao giờ gõ xong). Ẩn hàng Relays.
-  - Màn hình chết: số đợt đã qua, số kill, kỷ lục (hoặc "New best!"). Kỷ lục theo map + độ khó, lưu ở `doomzone.survival.v1` (hơn nhau ở số đợt, rồi số kill). Màn hình tiêu đề hiện kỷ lục khi chọn Survival.
+  - Màn hình chết: số đợt đã qua, số kill, kỷ lục (hoặc "New best!"). Kỷ lục theo map + độ khó, lưu ở `doomzone.survival.v1` (hơn nhau ở số đợt, rồi số kill). Màn hình tiêu đề hiện kỷ lục của map và độ khó đang chọn khi chọn Survival ("Best here on Hard: 3 waves cleared · 12 kills · 4:05"); chưa có thì ghi "No Survival run on this map at Hard yet…".
+  - Lượt bỏ dở cũng được tính (`SXQ_leave`): Restart, Main menu hoặc đóng tab giữa lượt thì lượt đó vẫn lưu, miễn đã tới đợt 1. Trước đây chỉ lưu khi chết, nên thoát giữa chừng thì màn hình tiêu đề vẫn báo chưa có lượt nào.
   - Cách nối với game: cờ `window.SXQ_SURV` làm luồng nhiệm vụ trong `game/js/10_game.js` bỏ relay, điểm đánh dấu, lời radio mở đầu và dòng nhiệm vụ; `troopers/troopers.js` không gửi đội lính của nhiệm vụ. Robot boss của sa mạc và lính đồn trú ở cứ điểm vẫn ra như thường.
   - Sự kiện cho phần khác: `survival:wave`, `survival:cleared`, `survival:over`.
 - **Sinh tồn chơi chung (co-op):**
