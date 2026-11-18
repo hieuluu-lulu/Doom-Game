@@ -247,25 +247,6 @@ function SXO_kit(api) {
   waterM.customProgramCacheKey = function () { return 'sxo-water-1' }
   var frondM = new lt.MeshStandardMaterial({ color: 0x5c7330, roughness: 0.85, side: lt.DoubleSide })
   frondM.name = 'sxo_frond'
-  // one palm frond: a tapering strip arching out and down, folded into a shallow V
-  function frondGeo(L, W, droop) {
-    var n = 9, pos = [], idx = []
-    for (var k = 0; k <= n; k++) {
-      var u = k / n, x = L * u, y = L * (0.18 * u - droop * u * u)
-      var w = W * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.04)), 0.7) * (1 - u * 0.45)
-      pos.push(x, y - w * 0.4, -w, x, y, 0, x, y - w * 0.4, w)
-      if (k < n) {
-        var a = k * 3
-        idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5)
-      }
-    }
-    var g = new lt.BufferGeometry()
-    g.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
-    g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((n + 1) * 6).fill(0), 2))
-    g.setIndex(idx)
-    g.computeVertexNormals()
-    return g
-  }
   // stone well with a windlass and a bucket
   function well(x, z) {
     t.cyl(M('sxd_adobe'), 1.3, 0.85, x, 0.425, z, { seg: 20 })
@@ -286,22 +267,101 @@ function SXO_kit(api) {
     }
   }
   // date palm: a leaning, tapering trunk and a crown of drooping fronds
+  // a tube along a polyline (points [x, y, z], one radius each): trunks, branches
+  function tube(pts, rad, mat, seg) {
+    var NS = seg || 7, pos = [], idx = []
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)]
+      var tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2], tl = Math.hypot(tx, ty, tz) || 1
+      tx /= tl; ty /= tl; tz /= tl
+      // two unit vectors across the tube
+      var ux = ty * 1 - tz * 0, uy = tz * 0 - tx * 1, uz = tx * 0 - ty * 0 // t × z
+      var ul = Math.hypot(ux, uy, uz)
+      if (ul < 1e-3) { ux = 1; uy = 0; uz = 0; ul = 1 }
+      ux /= ul; uy /= ul; uz /= ul
+      var vx = ty * uz - tz * uy, vy = tz * ux - tx * uz, vz = tx * uy - ty * ux
+      for (var k = 0; k <= NS; k++) {
+        var an = (k / NS) * Math.PI * 2, c = Math.cos(an) * rad[i], sn = Math.sin(an) * rad[i]
+        pos.push(pts[i][0] + ux * c + vx * sn, pts[i][1] + uy * c + vy * sn, pts[i][2] + uz * c + vz * sn)
+      }
+      if (i) for (var k2 = 0; k2 < NS; k2++) { var p0 = (i - 1) * (NS + 1) + k2, p1 = p0 + NS + 1; idx.push(p0, p1, p0 + 1, p0 + 1, p1, p1 + 1) }
+    }
+    var g = new lt.BufferGeometry()
+    g.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+    g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((pos.length / 3) * 2).fill(0), 2))
+    g.setIndex(idx)
+    g.computeVertexNormals()
+    t.add(g, mat, {})
+  }
+  var palmBark = new lt.MeshStandardMaterial({ color: 0x7d6a54, roughness: 0.95 }); palmBark.name = 'sxo_palm_bark'
+  var fOld = new lt.MeshStandardMaterial({ color: 0x8e8a3e, roughness: 0.85, side: lt.DoubleSide }); fOld.name = 'sxo_frond_old'
+  var fDead = new lt.MeshStandardMaterial({ color: 0x7b5f3e, roughness: 0.95, side: lt.DoubleSide }); fDead.name = 'sxo_frond_dead'
+  var dateM = new lt.MeshStandardMaterial({ color: 0xa4561f, roughness: 0.7 }); dateM.name = 'sxo_dates'
+  // date palm: a leaning trunk ringed with old leaf bases, swelling at the foot;
+  // a crown of feather fronds (a curved rib, leaflets both sides in a shallow
+  // V), the lower ones yellowing, a few dead ones hanging down the trunk, and
+  // on some, clusters of dates
   function palm(x, z, H, lean, seed) {
-    var r = SXD_rng(seed), la = r() * 6.28, top = null, prev = [x, 0, z]
-    for (var k = 1; k <= 6; k++) {
-      var f = k / 6, off = lean * f * f
-      var p = [x + Math.cos(la) * off, H * f, z + Math.sin(la) * off]
-      t.rod(wood, prev, p, 0.2 - 0.08 * f, { seg: 7, cast: true })
-      prev = p
+    var r = SXD_rng(seed), la = r() * 6.28
+    var at = function (f) { var off = lean * f * f; return [x + Math.cos(la) * off, H * f, z + Math.sin(la) * off] }
+    var NR = Math.max(12, Math.round(H / 0.16)), pts = [], rad = []
+    for (var i = 0; i <= NR; i++) {
+      var f = i / NR
+      pts.push(at(f))
+      rad.push((0.21 - 0.06 * f) * (1 + 0.45 * Math.max(0, 1 - f * 9)) * (i % 2 ? 0.95 : 1.05))
     }
-    top = prev
-    for (var n = 0; n < 11; n++) {
-      var a = (n / 11) * 6.28 + r() * 0.4, g = frondGeo(2.6 + r() * 0.9, 0.42 + r() * 0.12, 0.45 + r() * 0.35)
-      g.rotateY(-a)
-      t.add(g, frondM, { p: [top[0], top[1] - 0.1, top[2]] })
+    tube(pts, rad, palmBark, 8)
+    var top = at(1)
+    t.cyl(palmBark, 0.3, 0.7, top[0], top[1] - 0.15, top[2], { seg: 10, rTop: 0.2 })
+    // the fronds, into one geometry per colour
+    var bk = { green: [], old: [], dead: [] }
+    var frond = function (list, a, el, L, droop, leaf) {
+      var hx = Math.cos(a), hz = Math.sin(a)
+      var P = function (u) { return [top[0] + hx * L * u * Math.cos(el), top[1] + 0.1 + L * (u * Math.sin(el) - droop * u * u), top[2] + hz * L * u * Math.cos(el)] }
+      var prev = P(0)
+      for (var u = 0.06; u <= 1.001; u += 0.06) {
+        var p = P(u), tx = p[0] - prev[0], ty = p[1] - prev[1], tz = p[2] - prev[2], tl = Math.hypot(tx, ty, tz) || 1
+        tx /= tl; ty /= tl; tz /= tl
+        // the rib: a thin strip
+        var sx = -tz, sz = tx, sl = Math.hypot(sx, sz) || 1; sx /= sl; sz /= sl
+        var w = 0.03 * (1 - u * 0.6)
+        list.push(prev[0] - sx * w, prev[1], prev[2] - sz * w, prev[0] + sx * w, prev[1], prev[2] + sz * w, p[0] + sx * w, p[1], p[2] + sz * w)
+        list.push(prev[0] - sx * w, prev[1], prev[2] - sz * w, p[0] + sx * w, p[1], p[2] + sz * w, p[0] - sx * w, p[1], p[2] - sz * w)
+        // leaflets, longest mid-frond, swept forward and down
+        if (u > 0.12) {
+          var ll = L * leaf * Math.pow(Math.sin(Math.PI * Math.min(1, 0.12 + u * 0.95)), 0.7)
+          for (var sd = -1; sd <= 1; sd += 2) {
+            var dx = sx * sd * 0.8 + tx * 0.5, dy = -0.35 + ty * 0.3, dz = sz * sd * 0.8 + tz * 0.5, dl = Math.hypot(dx, dy, dz)
+            var tip = [p[0] + (dx / dl) * ll, p[1] + (dy / dl) * ll, p[2] + (dz / dl) * ll]
+            list.push(p[0] - tx * 0.045, p[1] - ty * 0.045, p[2] - tz * 0.045, p[0] + tx * 0.045, p[1] + ty * 0.045, p[2] + tz * 0.045, tip[0], tip[1], tip[2])
+          }
+        }
+        prev = p
+      }
     }
-    t.cyl(wood, 0.24, 0.5, top[0], top[1] - 0.3, top[2], { seg: 8, rTop: 0.14 })
-    t.col(x - 0.25, 0, z - 0.25, x + 0.25, H * 0.5, z + 0.25, 'wood')
+    var n = 13 + ((r() * 5) | 0)
+    for (var k = 0; k < n; k++) {
+      var a = (k / n) * 6.28 + r() * 0.35, ring = k % 3, el = ring === 0 ? 0.65 : ring === 1 ? 0.2 : -0.2
+      frond(ring === 2 && r() < 0.6 ? bk.old : bk.green, a, el + (r() - 0.5) * 0.2, 2.6 + r() * 1.0, 0.55 + r() * 0.35, 0.3)
+    }
+    for (var d = 0; d < 3 + ((r() * 3) | 0); d++) frond(bk.dead, r() * 6.28, -1.25 - r() * 0.2, 1.8 + r() * 0.6, 0.05, 0.18)
+    ;[[bk.green, frondM], [bk.old, fOld], [bk.dead, fDead]].forEach(function (q) {
+      if (!q[0].length) return
+      var g = new lt.BufferGeometry()
+      g.setAttribute('position', new lt.Float32BufferAttribute(q[0], 3))
+      g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((q[0].length / 3) * 2).fill(0), 2))
+      g.computeVertexNormals()
+      t.add(g, q[1], {})
+    })
+    // dates hanging under the crown (some palms)
+    if (r() < 0.45) for (var c = 0; c < 2 + ((r() * 2) | 0); c++) {
+      var ca = r() * 6.28, cp = [top[0] + Math.cos(ca) * 0.35, top[1] - 0.45, top[2] + Math.sin(ca) * 0.35]
+      var cg = new lt.IcosahedronGeometry(0.2, 1)
+      cg.scale(1, 1.6, 1)
+      t.add(cg, dateM, { p: cp })
+      t.rod(fOld, [top[0], top[1] - 0.1, top[2]], [cp[0], cp[1] + 0.25, cp[2]], 0.02, { seg: 4 })
+    }
+    t.col(x - 0.28, 0, z - 0.28, x + 0.28, H * 0.5, z + 0.28, 'wood')
   }
   // a belt conveyor between two points (low end → high end) on trestles
   function conveyor(x0, y0, x1, y1, z) {
@@ -325,7 +385,7 @@ function SXO_kit(api) {
     })
   }
 
-  return { S: S, tent: tent, helipad: helipad, flag: flag, hut: hut, dish: dish, watchtower: watchtower, bunker: bunker, pillbox: pillbox, tooth: tooth, gravel: gravel, crushed: crushed, crane: crane, well: well, pond: pond, palm: palm, conveyor: conveyor, guyWires: guyWires, waterM: waterM, frondM: frondM }
+  return { S: S, tent: tent, helipad: helipad, flag: flag, hut: hut, dish: dish, watchtower: watchtower, bunker: bunker, pillbox: pillbox, tooth: tooth, gravel: gravel, crushed: crushed, crane: crane, well: well, pond: pond, palm: palm, conveyor: conveyor, guyWires: guyWires, tube: tube, waterM: waterM, frondM: frondM }
 }
 
 function SXO_layout(api) {

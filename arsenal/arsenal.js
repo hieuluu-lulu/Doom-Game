@@ -2572,6 +2572,9 @@ function SXA_buildArsenal(G, rifle) {
     spots = spots.concat(gearSpots(spots));
     if (!spots.some(function (s) { return SXA_ARMOR[s.kind]; })) spots = spots.concat(armorSpots(spots));
     if (!spots.some(function (s) { return SXA_PACKS[s.kind]; })) spots = spots.concat(packSpots(spots));
+    // a level's extra loot (the desert's houses): on top of all the above, and
+    // not counted by the "map has meds / armor / packs already" checks
+    if (Array.isArray(lv.extraPickups)) spots = spots.concat(lv.extraPickups);
     spots.forEach(function (s) {
       var kind = s.kind === 'weapon' || s.kind === 'weapon:shotgun' ? 'shotgun' : s.kind;
       if (kind !== 'ammo' && !SXA_isCal(kind) && kind !== 'grenade' && kind !== 'shotgun' && kind !== 'sniper' && kind !== 'rifle' && !SXA_MEDS[kind] && !SXA_ARMOR[kind] && !SXA_PACKS[kind] && !(kind.indexOf('att:') === 0 && SXA_ATT[kind.slice(4)])) return;

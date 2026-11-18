@@ -801,10 +801,14 @@ function SXC_vehicle(G, U, spec, opts, build) {
         var d = Math.sqrt(d2), nx, ny, nz, pen
         if (d > 1e-5) { nx = dx / d; ny = dy / d; nz = dz / d; pen = r - d }
         else {
-          // centre inside the box: leave along the shallowest axis
+          // centre inside the box: leave by the face it came in through (the
+          // shallowest of the faces the car is moving into), not just the
+          // nearest one — past the middle of a thin wall that is the far side
           var ex = [hs.x - bx.min.x, bx.max.x - hs.x, hs.y - bx.min.y, bx.max.y - hs.y, hs.z - bx.min.z, bx.max.z - hs.z]
-          var mi = 0
-          for (var e = 1; e < 6; e++) if (ex[e] < ex[mi]) mi = e
+          var into = [vel.x > 0.5, vel.x < -0.5, vel.y > 0.5, vel.y < -0.5, vel.z > 0.5, vel.z < -0.5]
+          var mi = -1
+          for (var e = 0; e < 6; e++) if (into[e] && (mi < 0 || ex[e] < ex[mi])) mi = e
+          if (mi < 0) { mi = 0; for (var e2 = 1; e2 < 6; e2++) if (ex[e2] < ex[mi]) mi = e2 }
           nx = mi === 0 ? -1 : mi === 1 ? 1 : 0; ny = mi === 2 ? -1 : mi === 3 ? 1 : 0; nz = mi === 4 ? -1 : mi === 5 ? 1 : 0
           pen = ex[mi] + r
         }
@@ -847,7 +851,9 @@ function SXC_vehicle(G, U, spec, opts, build) {
   function simulate(dt, ctl) {
     if (st.asleep) return
     gatherBoxes(dt)
-    var nSub = Math.min(6, Math.max(1, Math.ceil(dt / (1 / 120))))
+    // sub-steps: at least 120 a second, and short enough that no hull sphere
+    // moves more than 0.15 m in one (thin walls: 0.2 m house walls, poles)
+    var nSub = Math.min(16, Math.max(1, Math.ceil(dt / (1 / 120)), Math.ceil((vel.length() * dt) / 0.15)))
     var h = dt / nSub
     var vy0 = vel.y
     for (var k = 0; k < nSub; k++) step(h, ctl)

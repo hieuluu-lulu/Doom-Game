@@ -971,6 +971,7 @@ async function SXD_level(i) {
     shedLights: hall.lights,
     vantage: { stairsFoot: V(-12, 0, 8), roof: V(-21, 9.2, 21.5) },
     pickupSpots: pickupSpots,
+    extraPickups: typeof SXH_LOOT !== 'undefined' ? SXH_LOOT : [], // loot in the houses (houses feature)
     stats: { labelsAtlased: atlas.count, props: t.placed.length, tris: Math.round(tris), meshes: merged.children.length + pR(t.dynRoot) },
     placed: t.placed,
     groundSurfaceAt: function (x, z) {

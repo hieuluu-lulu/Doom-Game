@@ -1958,6 +1958,11 @@ function CXR_glassTick(dt) {
   if (!CXR_POOL.built && G0 && G0.scene && (CXR_POOL.tries = (CXR_POOL.tries || 0) + 1) < 400) { try { CXR_POOL.built = CXR_poolBuild(G0) } catch (e) { CXR_POOL.built = true; console.error('[crossroads] pool', e) } }
   if (CXR_POOL.u) CXR_POOL.u.uT.value += dt
   if (G0 && G0.player) { var pp = G0.player.pos; pp.x = Math.max(CXR_B.x0 + 0.4, Math.min(CXR_B.x1 - 0.4, pp.x)); pp.z = Math.max(CXR_B.z0 + 0.4, Math.min(CXR_B.z1 - 0.4, pp.z)) }
+  CXR_shardTick(dt)
+}
+// the falling glass shards (also the desert's houses, houses/houses.js)
+function CXR_shardTick(dt) {
+  var GL = CXR_GL
   var sm = GL.shards
   if (!sm) return
   var m = GL.m, q = CXR_glassTick.q || (CXR_glassTick.q = new lt.Quaternion()), sc = CXR_glassTick.s || (CXR_glassTick.s = new lt.Vector3())

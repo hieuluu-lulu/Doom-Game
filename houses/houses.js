@@ -43,6 +43,11 @@ var SXH_ACTIVE_IN = 160 // m: …and its stairs, floors and furniture inside thi
 var SXH_INSIDE = 220 // m: the rooms, stairs and furniture are drawn inside this
 var SXH_SIGNS = [['CAFE 24', 'paint_red'], ['NOODLE BAR', 'paint_teal'], ['HARDWARE', 'paint_blue'], ['TAILOR', 'paint_blue'], ['MOTEL', 'paint_red'],
   ['PHARMACY', 'paint_green'], ['GARAGE', 'paint_orange'], ['BAKERY', 'paint_red'], ['MARKET', 'paint_teal'], ['RADIO', 'paint_blue'], ['DINER', 'paint_red'], ['BARBER', 'paint_teal']]
+// loot on the floors: [kind, weight] (arsenal pickup kinds); about one floor in two has something
+var SXH_LOOT_KINDS = [['ammo', 20], ['ammo:556', 10], ['ammo:12g', 6], ['ammo:50ae', 6], ['ammo:338', 3], ['grenade', 9], ['med_s', 10], ['med', 7], ['med_l', 2],
+  ['vest1', 4], ['helm1', 4], ['vest2', 3], ['helm2', 3], ['vest3', 1], ['helm3', 1], ['bag1', 3], ['bag2', 2], ['bag3', 0.5], ['shotgun', 2], ['rifle', 2], ['sniper', 1],
+  ['att:x4', 1.5], ['att:holo', 1.5], ['att:grip', 1.5], ['att:extmag', 1.5], ['att:supp', 1], ['att:comp', 1], ['att:stock', 1], ['att:x8', 0.5]]
+var SXH_LOOT = [] // {kind, pos} for the level's extraPickups (arsenal/arsenal.js)
 // plaster colours of the desert buildings: sand, tan, cream, terracotta, dusty pink, grey
 var SXH_TINTS = [0xd9c19a, 0xc79c74, 0xe6dccb, 0xb9775a, 0xcf9f8c, 0xaaa49a, 0xd8b483]
 
@@ -139,6 +144,9 @@ function SXH_layout(api) {
   var mk = function (c, rough, nm, o) { var m = new lt.MeshStandardMaterial(Object.assign({ color: c, roughness: rough, metalness: 0 }, o || {})); m.name = nm; return m }
   var darkM = mk(0x24211e, 1, 'sxh_far_inside')
   var leafM = mk(0x56603a, 0.9, 'sxh_leaf', { flatShading: true }), barkM = mk(0x6f6252, 0.95, 'sxh_bark')
+  var spikeM = mk(0x66773f, 0.85, 'sxh_spike', { side: lt.DoubleSide }), deadM = mk(0x7a6648, 0.95, 'sxh_dead', { side: lt.DoubleSide })
+  var shrubM = mk(0x7d8858, 0.9, 'sxh_shrub', { side: lt.DoubleSide })
+  var SHUT = ['paint_teal', 'paint_green', 'paint_blue', 'wood_dark', 'paint_red'].map(function (n) { return M(n) })
   var cropM = mk(0x6c7a36, 0.9, 'sxh_crop'), strawM = mk(0xb59a5c, 0.95, 'sxh_straw')
   // the outside brick: plain until the model's brick texture lands (SXH_models)
   var facadeM = mk(0x8a5446, 0.92, 'sxh_brick')
@@ -157,7 +165,10 @@ function SXH_layout(api) {
     tintM[c] = m
     return m
   }
-  SXH_ST = { built: [], facadeM: facadeM, models: false }
+  SXH_ST = { built: [], facadeM: facadeM, models: false, trees: [] }
+  SXH_LOOT.length = 0
+  var lootW = SXH_LOOT_KINDS.reduce(function (a, k) { return a + k[1] }, 0)
+  var lootKind = function (r) { var x = r() * lootW; for (var i = 0; i < SXH_LOOT_KINDS.length; i++) { x -= SXH_LOOT_KINDS[i][1]; if (x <= 0) return SXH_LOOT_KINDS[i][0] } return 'ammo' }
   var seed = 900
   var S = function () { return ++seed }
 
@@ -219,10 +230,18 @@ function SXH_layout(api) {
       var dw = (u.doorW || 1.6) / 2
       dx0 = -dw; dx1 = dw; doorH = Math.min(u.doorW > 3 ? 3.1 : 2.4, lv[1] - 0.45)
     }
+    // the back door clear of the stairs (they run along the back wall from the left)
+    var nF = flat ? F : F - 1, bx0 = dx0, bx1 = dx1
+    if (!model && nF > 0) {
+      var stairEnd = ix0 + 0.8 + 11 * 0.34 + 0.4
+      if (bx0 < stairEnd) { bx1 = stairEnd + (dx1 - dx0); bx0 = stairEnd }
+      if (bx1 > ix1 - 0.4) u.back = false
+    }
     var addWin = function (f, c, w, k) {
       var a0 = c - w / 2, a1 = c + w / 2, y0 = lv[k] + WIN.sill, y1 = y0 + WIN.h
       if (w < 0.6 || a0 < f.lo + 0.3 || a1 > f.hi - 0.3) return
-      if (k === 0 && (f === faces[0] || (f === faces[1] && u.back !== false)) && a1 > dx0 - 0.3 && a0 < dx1 + 0.3) return
+      if (k === 0 && f === faces[0] && a1 > dx0 - 0.3 && a0 < dx1 + 0.3) return
+      if (k === 0 && f === faces[1] && u.back !== false && a1 > bx0 - 0.3 && a0 < bx1 + 0.3) return
       if (!flat && k === F - 1 && y1 > h - 0.25) return
       f.holes.push([a0, a1, y0, y1])
     }
@@ -231,18 +250,45 @@ function SXH_layout(api) {
       colsZ.forEach(function (c) { addWin(faces[2], c, wZ, k1); addWin(faces[3], c, wZ, k1) })
     }
     faces[0].doors.push([dx0, dx1, 0, doorH]); faces[0].holes.push(faces[0].doors[0])
-    if (u.back !== false) { faces[1].doors.push([dx0, dx1, 0, doorH]); faces[1].holes.push(faces[1].doors[0]) }
+    if (u.back !== false) { faces[1].doors.push([bx0, bx1, 0, doorH]); faces[1].holes.push(faces[1].doors[0]) }
     // frames, sills, lintels
-    var trim = function (f, mat, a0, a1, y0, y1, d0, d1) {
-      if (f.x) lbox(mat, a0, y0, f.at + f.n[1] * d0, a1, y1, f.at + f.n[1] * d1, false)
-      else lbox(mat, f.at + f.n[0] * d0, y0, a0, f.at + f.n[0] * d1, y1, a1, false)
+    // into: a group (fine detail: ctx.inner, drawn near only)
+    var trim = function (f, mat, a0, a1, y0, y1, d0, d1, into) {
+      if (f.x) lbox(mat, a0, y0, f.at + f.n[1] * d0, a1, y1, f.at + f.n[1] * d1, false, into)
+      else lbox(mat, f.at + f.n[0] * d0, y0, a0, f.at + f.n[0] * d1, y1, a1, false, into)
     }
-    faces.forEach(function (f) {
+    var shut = !model && ctx.r() < 0.45 ? SHUT[(ctx.r() * SHUT.length) | 0] : null
+    faces.forEach(function (f, fi) {
       f.holes.forEach(function (o) {
-        if (f.doors.indexOf(o) < 0) trim(f, sillM, o[0] - 0.1, o[1] + 0.1, o[2] - 0.09, o[2], -0.02, 0.09)
+        var door = f.doors.indexOf(o) >= 0
+        if (!door) trim(f, sillM, o[0] - 0.1, o[1] + 0.1, o[2] - 0.09, o[2], -0.02, 0.09)
         trim(f, sillM, o[0] - 0.1, o[1] + 0.1, o[3], o[3] + 0.16, -0.02, 0.05)
         trim(f, frameM, o[0] - 0.06, o[0], o[2], o[3], -0.02, 0.04)
         trim(f, frameM, o[1], o[1] + 0.06, o[2], o[3], -0.02, 0.04)
+        if (door) {
+          // a step at the door, the leaf standing open inside
+          if (f === faces[0] || f === faces[1]) { trim(f, sillM, o[0] - 0.3, o[1] + 0.3, 0, 0.14, 0, 0.6); var st = f.x ? [o[0] - 0.3, f.at, o[1] + 0.3, f.at + f.n[1] * 0.6] : null; if (st) lbox(null, st[0], 0, Math.min(st[1], st[3]), st[2], 0.14, Math.max(st[1], st[3]), true) }
+          if (!u.shop || f !== faces[0]) lbox(wood, o[1] - 0.05, 0.02, f.at - f.n[1] * 0.25, o[1], o[3] - 0.04, f.at - f.n[1] * (0.25 + (o[1] - o[0]) * 0.92), false, inner)
+          return
+        }
+        // the frame round the glass (mid-wall), a mullion and a transom
+        var mid = (o[0] + o[1]) / 2, ty = o[2] + (o[3] - o[2]) * 0.62
+        trim(f, frameM, o[0], o[1], o[2], o[2] + 0.05, -0.15, -0.09, inner)
+        trim(f, frameM, o[0], o[1], o[3] - 0.05, o[3], -0.15, -0.09, inner)
+        trim(f, frameM, mid - 0.025, mid + 0.025, o[2], o[3], -0.15, -0.09, inner)
+        trim(f, frameM, o[0], o[1], ty - 0.025, ty + 0.025, -0.15, -0.09, inner)
+        // shutters folded back beside the window (plaster houses, some of them)
+        var lw = (o[1] - o[0]) / 2
+        if (shut && o[0] - lw - 0.08 > f.lo + 0.15 && o[1] + lw + 0.08 < f.hi - 0.15) {
+          trim(f, shut, o[0] - lw - 0.07, o[0] - 0.07, o[2] - 0.02, o[3] + 0.02, 0.01, 0.05)
+          trim(f, shut, o[1] + 0.07, o[1] + lw + 0.07, o[2] - 0.02, o[3] + 0.02, 0.01, 0.05)
+          for (var sl = o[2] + 0.18; sl < o[3] - 0.1; sl += 0.22) { trim(f, frameM, o[0] - lw - 0.05, o[0] - 0.09, sl, sl + 0.03, 0.05, 0.06, inner); trim(f, frameM, o[1] + 0.09, o[1] + lw + 0.05, sl, sl + 0.03, 0.05, 0.06, inner) }
+        }
+        // an air-conditioner under some side windows upstairs
+        if (fi >= 2 && o[2] > 3 && ctx.r() < 0.3) {
+          trim(f, galv, mid - 0.42, mid + 0.42, o[2] - 0.72, o[2] - 0.22, 0, 0.45)
+          trim(f, frameM, mid - 0.36, mid + 0.36, o[2] - 0.66, o[2] - 0.28, 0.45, 0.46, inner)
+        }
       })
     })
     // the outside skin over each wall minus its openings (into the site's buckets)
@@ -271,7 +317,6 @@ function SXH_layout(api) {
     // stairs: two 1 m lanes along the back wall; flight f (level f → f+1, onto
     // the roof on a flat roof) runs in lane f%2, odd flights rising -x to a
     // landing at the end wall, even ones rising +x (the Crossroads switchback)
-    var nF = flat ? F : F - 1
     var LW = Math.min(1.0, (iz1 - iz0 - 1.4) / 2), run = 0.34, LAND = 0.8, flights = []
     for (var f = 0; f < nF; f++) {
       var rise = lv[f + 1] - lv[f], n = Math.round(rise / STEP), Lf = n * run
@@ -306,7 +351,12 @@ function SXH_layout(api) {
         lbox(mat, W / 2 - 0.01, y0, -D / 2, W / 2 + o, y1, D / 2, false)
       }
       var holesAt = function (y0, y1) { return faces.some(function (f) { return f.holes.some(function (o) { return o[2] < y1 && o[3] > y0 }) }) }
-      if (!holesAt(0.05, 0.55)) ring(dirty, 0, 0.55, 0.05)
+      faces.forEach(function (f) {
+        var lo = f.x ? -W / 2 - 0.05 : -D / 2, hi = -lo
+        SXH_rects(lo, hi, 0, 0.55, f.doors).forEach(function (rr) { trim(f, dirty, rr[0], rr[1], 0, 0.55, 0, 0.05) })
+        // pilasters at the corners
+        ;[[lo, lo + 0.45], [hi - 0.45, hi]].forEach(function (c) { trim(f, sillM, c[0], c[1], 0.55, h - 0.3, 0, 0.035) })
+      })
       for (var bL = 1; bL < F; bL++) if (!holesAt(lv[bL] - 0.12, lv[bL] + 0.06)) ring(sillM, lv[bL] - 0.12, lv[bL] + 0.06, 0.05)
       if (flat) ring(sillM, h - 0.3, h + 0.05, 0.14) // cornice
     }
@@ -332,6 +382,18 @@ function SXH_layout(api) {
         lbox(null, tx - 1.0, R + 1.2, tz - 1.0, tx + 1.0, R + 3.2, tz + 1.0, 'metal')
       }
       if (!model && W >= 8) { lbox(galv, -W / 2 + 1.0, R, D / 2 - 1.6, -W / 2 + 1.9, R + 0.7, D / 2 - 0.9, 'metal'); lbox(galv, -W / 2 + 2.2, R, D / 2 - 1.6, -W / 2 + 3.1, R + 0.7, D / 2 - 0.9, 'metal') }
+      // a TV antenna and a satellite dish on some roofs
+      if (ctx.r() < 0.6) {
+        var an = L3(-W / 2 + 1.2, R, D / 2 - 3.0)
+        t.rod(steel, an, [an[0], R + 3.2, an[2]], 0.025, { seg: 4 })
+        for (var ab = 0; ab < 3; ab++) { var aa = L3(-W / 2 + 1.2 - 0.5 + ab * 0.06, R + 2.4 + ab * 0.3, D / 2 - 3.0), ab2 = L3(-W / 2 + 1.2 + 0.5 - ab * 0.06, R + 2.4 + ab * 0.3, D / 2 - 3.0); t.rod(steel, aa, ab2, 0.012, { seg: 3 }) }
+      }
+      if (ctx.r() < 0.5) {
+        var dp = L3(-W / 2 + 0.9, R + PH - 0.2, -D / 2 + 1.6), dg = new lt.SphereGeometry(0.42, 14, 6, 0, Math.PI * 2, 0, 0.9)
+        dg.rotateX(-1.2); dg.rotateY(u.yaw + ctx.r() * 2)
+        t.add(dg, M('paint_white'), { p: dp })
+        t.rod(steel, [dp[0], R, dp[2]], dp, 0.03, { seg: 4 })
+      }
     } else {
       // tiled roof over the walls, a little overhang; gable ends in plaster
       var o = 0.45, Hr = Math.min(W, D) * 0.28
@@ -339,6 +401,24 @@ function SXH_layout(api) {
       var X0 = Math.min(a[0], b[0]), X1 = Math.max(a[0], b[0]), Z0 = Math.min(a[1], b[1]), Z1 = Math.max(a[1], b[1])
       SXH_roof(ctx.bucket(tileM), ctx.bucket(plaster(u.tint)), X0, Z0, X1, Z1, h, Hr, u.roof, o)
       t.col(X0 + o, h, Z0 + o, X1 - o, h + Hr * 0.55, Z1 - o, 'concrete')
+    }
+    // balconies on the front (plaster houses of 3+ storeys, some): a slab and
+    // a railing under every other upper window, reachable through the window
+    if (!model && F >= 3 && ctx.r() < 0.55) {
+      var bal = steel
+      for (var bk = 1; bk < F; bk++) faces[0].holes.forEach(function (o, oi) {
+        if (oi % 2 || Math.abs(o[2] - (lv[bk] + WIN.sill)) > 0.01) return
+        var c0 = (o[0] + o[1]) / 2 - 1.0, c1 = (o[0] + o[1]) / 2 + 1.0, by = lv[bk]
+        if (c0 < -W / 2 + 0.3 || c1 > W / 2 - 0.3) return
+        lbox(sillM, c0, by - 0.16, D / 2, c1, by, D / 2 + 1.1, true)
+        lbox(null, c0, by, D / 2 + 1.04, c1, by + 1.0, D / 2 + 1.1, true)
+        lbox(null, c0, by, D / 2, c0 + 0.06, by + 1.0, D / 2 + 1.1, true)
+        lbox(null, c1 - 0.06, by, D / 2, c1, by + 1.0, D / 2 + 1.1, true)
+        lbox(bal, c0, by + 0.96, D / 2 + 1.04, c1, by + 1.0, D / 2 + 1.1, false)
+        lbox(bal, c0, by + 0.96, D / 2, c0 + 0.05, by + 1.0, D / 2 + 1.1, false)
+        lbox(bal, c1 - 0.05, by + 0.96, D / 2, c1, by + 1.0, D / 2 + 1.1, false)
+        for (var px2 = c0 + 0.05; px2 <= c1 - 0.04; px2 += 0.16) lbox(bal, px2, by, D / 2 + 1.06, px2 + 0.025, by + 0.96, D / 2 + 1.085, false, inner)
+      })
     }
     // fire escape on the right side: landings at every upper floor, steep
     // flights between them, a drop ladder (no climbing: it is the look)
@@ -407,25 +487,95 @@ function SXH_layout(api) {
       // awning
       if (!model) lbox(M(sg[1]), -2.2, doorH + 0.85, D / 2, 2.2, doorH + 0.95, D / 2 + 1.2, false)
     }
+    // glass in every window (mid-wall, like the Crossroads map's: shots break
+    // it, the player can vault through), local y: the site lifts it
+    faces.forEach(function (f) {
+      f.holes.forEach(function (o) {
+        if (f.doors.indexOf(o) >= 0) return
+        var mid = (o[0] + o[1]) / 2, w = f.x ? L2W(mid, f.at) : L2W(f.at, mid), n = L2Wd(f.n[0], f.n[1]), ax = L2Wd(f.x ? 1 : 0, f.x ? 0 : 1)
+        ctx.panes.push({ c: new lt.Vector3(w[0] - n[0] * 0.12, (o[2] + o[3]) / 2, w[1] - n[1] * 0.12), n: new lt.Vector3(n[0], 0, n[1]), ax: new lt.Vector3(ax[0], 0, ax[1]), w: o[1] - o[0], h: o[3] - o[2], y0: o[2] })
+      })
+    })
+    // loot: about one floor in two, somewhere in the room (clear of the stairs,
+    // the crate, the table and the shop counter)
+    for (var lk2 = 0; lk2 < F; lk2++) {
+      var nl = ctx.r() < 0.5 ? 1 : 0
+      if (nl && ctx.r() < 0.2) nl = 2
+      for (var li = 0; li < nl; li++) {
+        var xa0 = ix0 + 0.8, xa1 = ix1 - (u.shop && lk2 === 0 ? 2.5 : 1.5), za0 = iz0 + (nF ? 2 * LW : 0) + 0.6, za1 = iz1 - 1.9
+        if (xa1 <= xa0 || za1 <= za0) continue
+        var lp = L2W(xa0 + ctx.r() * (xa1 - xa0), za0 + ctx.r() * (za1 - za0))
+        ctx.loot.push({ kind: lootKind(ctx.r), pos: new lt.Vector3(lp[0], lv[lk2] + 0.03, lp[1]) })
+      }
+    }
   }
 
   // ---- desert trees
-  function joshua(x, z, sd) {
-    var r = SXD_rng(sd), H = 1.6 + r() * 1.5, lx = (r() - 0.5) * 0.5, lz = (r() - 0.5) * 0.5
-    var top = [x + lx, H, z + lz]
-    t.rod(barkM, [x, 0, z], top, 0.2, { seg: 7, cast: true })
-    var n = 2 + ((r() * 3) | 0)
+  // a burst of thin crossed blades from a centre: directions with y in [u0, u1]
+  function spikes(R, n, u0, u1, sd) {
+    var rr = SXD_rng(sd), pos = []
     for (var k = 0; k < n; k++) {
-      var a = r() * Math.PI * 2, L1 = 0.7 + r() * 0.8, out = 0.6 + r() * 0.5
-      var m1 = [top[0] + Math.cos(a) * L1 * out, top[1] + L1 * 0.7, top[2] + Math.sin(a) * L1 * out]
-      var L2 = 0.5 + r() * 0.8, m2 = [m1[0] + Math.cos(a) * L2 * 0.3, m1[1] + L2, m1[2] + Math.sin(a) * L2 * 0.3]
-      t.rod(barkM, top, m1, 0.13, { seg: 6, cast: true })
-      t.rod(barkM, m1, m2, 0.1, { seg: 6, cast: true })
-      var g = new lt.IcosahedronGeometry(0.42 + r() * 0.15, 0)
-      g.scale(1, 1.35, 1)
-      t.add(g, leafM, { p: [m2[0], m2[1] + 0.25, m2[2]], r: [r(), r() * 3, r()] })
+      var u = u0 + rr() * (u1 - u0), a = rr() * Math.PI * 2, cu = Math.sqrt(Math.max(0, 1 - u * u)), dx = Math.cos(a) * cu, dz = Math.sin(a) * cu
+      var L = R * (0.65 + rr() * 0.5), tip = [dx * L, u * L, dz * L], pl = Math.hypot(dx, dz) || 1, wx = (-dz / pl) * 0.04, wz = (dx / pl) * 0.04
+      pos.push(wx, 0, wz, -wx, 0, -wz, tip[0], tip[1], tip[2], 0, 0.04, 0, 0, -0.04, 0, tip[0], tip[1], tip[2])
     }
-    t.col(x - 0.22, 0, z - 0.22, x + 0.22, H, z + 0.22, 'wood')
+    var g = new lt.BufferGeometry()
+    g.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+    g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((pos.length / 3) * 2).fill(0), 2))
+    g.computeVertexNormals()
+    return g
+  }
+  // Joshua tree: a crooked trunk thick at the foot, limbs that bend up and
+  // fork once or twice, all shaggy with dead leaves pointing down, a spiky
+  // rosette at every tip with a brown skirt under it
+  var tubeOr = function (pts, rad) {
+    if (K && K.tube) { K.tube(pts, rad, barkM, 7); return }
+    for (var i = 1; i < pts.length; i++) t.rod(barkM, pts[i - 1], pts[i], rad[i], { seg: 7, cast: true })
+  }
+  function joshua(x, z, sd) {
+    if (SXH_ST.trees) SXH_ST.trees.push([x, z])
+    var r = SXD_rng(sd), H = 1.5 + r() * 1.6, lx = (r() - 0.5) * 0.45, lz = (r() - 0.5) * 0.45
+    var tp = [], tr = []
+    for (var i = 0; i <= 6; i++) {
+      var f = i / 6
+      tp.push([x + lx * f * f + (i ? (r() - 0.5) * 0.05 : 0), H * f, z + lz * f * f + (i ? (r() - 0.5) * 0.05 : 0)])
+      tr.push((0.27 - 0.09 * f) * (1 + 0.25 * Math.max(0, 1 - f * 5)) + (r() - 0.5) * 0.025)
+    }
+    tubeOr(tp, tr)
+    var shag = function (pts, from, size) {
+      for (var j = 1; j < pts.length; j++) {
+        if (j / (pts.length - 1) < from) continue
+        var q = pts[j]
+        t.add(spikes(size, 10, -1, -0.5, S()), deadM, { p: [q[0], q[1] - 0.04, q[2]] })
+      }
+    }
+    shag(tp, 0.5, 0.36)
+    var branch = function (p, az, el, len, rad, depth) {
+      var pts = [p], rr = [rad], q = p
+      for (var k = 1; k <= 4; k++) {
+        var bend = (k / 4) * 0.55, dx = Math.cos(az) * Math.cos(el) * (1 - bend), dy = Math.sin(el) + bend, dz = Math.sin(az) * Math.cos(el) * (1 - bend), dl = Math.hypot(dx, dy, dz)
+        q = [q[0] + (dx / dl) * (len / 4), q[1] + (dy / dl) * (len / 4), q[2] + (dz / dl) * (len / 4)]
+        pts.push(q); rr.push(rad * (1 - (0.28 * k) / 4))
+      }
+      tubeOr(pts, rr)
+      shag(pts, 0.2, 0.3)
+      var end = pts[4]
+      if (depth < 1 && r() < 0.65) {
+        for (var c = 0; c < 2; c++) branch(end, az + (c ? 0.65 : -0.65) + (r() - 0.5) * 0.4, 0.65 + r() * 0.35, 0.45 + r() * 0.5, rad * 0.78, depth + 1)
+      } else {
+        t.add(spikes(0.5 + r() * 0.2, 60, -0.3, 1, S()), spikeM, { p: [end[0], end[1] + 0.05, end[2]] })
+        t.add(spikes(0.42, 22, -1, -0.35, S()), deadM, { p: [end[0], end[1] - 0.12, end[2]] })
+      }
+    }
+    var nB = 2 + ((r() * 3) | 0), a0 = r() * 6.28
+    for (var b = 0; b < nB; b++) branch(tp[6], a0 + (b / nB) * 6.28 + (r() - 0.5) * 0.6, 0.45 + r() * 0.4, 0.8 + r() * 0.8, 0.16, 0)
+    t.col(x - 0.24, 0, z - 0.24, x + 0.24, H, z + 0.24, 'wood')
+  }
+  // a low desert shrub: a rounded tuft of grey-green blades and a few dry stems
+  function shrub(x, z) {
+    var r = SXD_rng(S()), R = 0.35 + r() * 0.4
+    t.add(spikes(R, 34, -0.1, 1, S()), shrubM, { p: [x, 0.02, z] })
+    t.add(spikes(R * 0.9, 10, 0.2, 1, S()), deadM, { p: [x, 0.02, z] })
   }
   function tree(x, z, r) {
     if (K && r() < 0.35) K.palm(x, z, 6 + r() * 3, 0.6 + r() * 1.2, S())
@@ -486,6 +636,12 @@ function SXH_layout(api) {
       var a2 = r() * Math.PI * 2, d2 = 4 + r() * (s.r - 6), x2 = s.x + Math.cos(a2) * d2, z2 = s.z + Math.sin(a2) * d2
       if (!free(x2, z2, 3)) continue
       tree(x2, z2, r)
+      break
+    }
+    for (var k3 = 0; k3 < Math.round(trees * 1.6); k3++) for (var tries3 = 0; tries3 < 20; tries3++) {
+      var a3 = r() * Math.PI * 2, d3 = 3 + r() * (s.r - 4), x3 = s.x + Math.cos(a3) * d3, z3 = s.z + Math.sin(a3) * d3
+      if (!free(x3, z3, 1.5)) continue
+      shrub(x3, z3)
       break
     }
   }
@@ -584,7 +740,7 @@ function SXH_layout(api) {
       U(-36, 27, { W: 8, D: 6, front: 'e', F: 1, tint: 0xcdb08a, roof: 'gable', back: false }),
     ]
     return { units: units, extra: function (free) {
-      var wm = plaster(white)
+      var wm = plaster(0xe3d6bd), wTrim = plaster(0xd3c3a4)
       var slabL = function (mat, x0, y0, z0, x1, y1, z1, col) {
         var a = toW(x0, z0), b = toW(x1, z1)
         var X0 = Math.min(a[0], b[0]), X1 = Math.max(a[0], b[0]), Z0 = Math.min(a[1], b[1]), Z1 = Math.max(a[1], b[1])
@@ -594,22 +750,53 @@ function SXH_layout(api) {
       // the walls: 2.6 m, tiled coping, a gate in front (pillars, a beam), a back
       // gate by the house and a side gate to the barn
       var HW = 2.6, th = 0.25
-      var wallX = function (z, x0, x1, gaps) {
-        var cuts = [x0].concat(gaps.reduce(function (A, g) { return A.concat(g) }, [])).concat([x1])
-        for (var k = 0; k + 1 < cuts.length; k += 2) { slabL(wm, cuts[k], 0, z - th, cuts[k + 1], HW, z + th, true); slabL(tileM, cuts[k] - 0.05, HW, z - th - 0.12, cuts[k + 1] + 0.05, HW + 0.14, z + th + 0.12) }
+      // a wall run (along x at z, or along z at x): plaster, a dark plinth, a tiled
+      // coping, pilasters every ~6 m with tiled caps
+      var wallRun = function (alongX, at, a0, a1) {
+        var B = function (mat, a, y0, o, b, y1, o2, col) { if (alongX) slabL(mat, a, y0, at - o, b, y1, at + o2, col); else slabL(mat, at - o, y0, a, at + o2, y1, b, col) }
+        B(wm, a0, 0, th, a1, HW, th, true)
+        B(dirty, a0, 0, th + 0.04, a1, 0.45, th + 0.04)
+        B(tileM, a0 - 0.05, HW, th + 0.12, a1 + 0.05, HW + 0.14, th + 0.12)
+        var n = Math.max(1, Math.round((a1 - a0) / 6))
+        for (var j = 0; j <= n; j++) {
+          var pa = a0 + ((a1 - a0) * j) / n
+          B(wTrim, pa - 0.3, 0.45, th + 0.08, pa + 0.3, HW + 0.1, th + 0.08)
+          B(tileM, pa - 0.38, HW + 0.1, th + 0.16, pa + 0.38, HW + 0.26, th + 0.16)
+        }
       }
-      var wallZ = function (x, z0, z1, gaps) {
-        var cuts = [z0].concat(gaps.reduce(function (A, g) { return A.concat(g) }, [])).concat([z1])
-        for (var k = 0; k + 1 < cuts.length; k += 2) { slabL(wm, x - th, 0, cuts[k], x + th, HW, cuts[k + 1], true); slabL(tileM, x - th - 0.12, HW, cuts[k] - 0.05, x + th + 0.12, HW + 0.14, cuts[k + 1] + 0.05) }
-      }
+      var cutsOf = function (a0, a1, gaps) { return [a0].concat(gaps.reduce(function (A, g) { return A.concat(g) }, [])).concat([a1]) }
+      var wallX = function (z, x0, x1, gaps) { var c = cutsOf(x0, x1, gaps); for (var k = 0; k + 1 < c.length; k += 2) wallRun(true, z, c[k], c[k + 1]) }
+      var wallZ = function (x, z0, z1, gaps) { var c = cutsOf(z0, z1, gaps); for (var k = 0; k + 1 < c.length; k += 2) wallRun(false, x, c[k], c[k + 1]) }
       wallX(19, -24, 24, [[-2.6, 2.6]])
       wallX(-19, -24, 24, [[11, 14.5]])
       wallZ(-24, -19, 19, [])
       wallZ(24, -19, 19, [[-8, -4]])
       ;[-3.1, 3.1].forEach(function (gx) { slabL(wm, gx - 0.5, 0, 18.5, gx + 0.5, 3.4, 19.5, true); slabL(tileM, gx - 0.62, 3.4, 18.38, gx + 0.62, 3.55, 19.62) })
       slabL(wm, -3.6, 3.0, 18.7, 3.6, 3.4, 19.3, true)
-      // the courtyard: paving, a fountain, palms, planted beds
-      slabL(plaster(0xd8c8aa), -11.5, 0, -3.6, 11.5, 0.04, 18.6)
+      // over the gate: a little tiled roof, a sign; the two wooden leaves stand open inward
+      var rb = { pos: [], nrm: [], uv: [] }, wb = { pos: [], nrm: [], uv: [] }, ga = toW(-3.95, 18.25), gb = toW(3.95, 19.75)
+      SXH_roof(rb, wb, Math.min(ga[0], gb[0]), Math.min(ga[1], gb[1]), Math.max(ga[0], gb[0]), Math.max(ga[1], gb[1]), 3.55, 0.75, 'gable', 0.2)
+      ;[[rb, tileM], [wb, wm]].forEach(function (q) {
+        if (!q[0].pos.length) return
+        var g = new lt.BufferGeometry()
+        g.setAttribute('position', new lt.Float32BufferAttribute(q[0].pos, 3)); g.setAttribute('normal', new lt.Float32BufferAttribute(q[0].nrm, 3)); g.setAttribute('uv', new lt.Float32BufferAttribute(q[0].uv, 2))
+        t.add(g, q[1], {})
+      })
+      slabL(wood, -1.9, 2.35, 19.32, 1.9, 2.92, 19.42)
+      ;[-1.6, 1.6].forEach(function (cx2) { slabL(steel, cx2 - 0.02, 2.92, 19.35, cx2 + 0.02, 3.0, 19.39) })
+      var sc = toW(0, 19.47)
+      t.label('OLD RANCH', 0.42, sc[0], 2.64, sc[1], turn ? 'x-' : 'z+', { color: 'white', font: 'stencil', distress: 0.35 })
+      var leafA = 1.25, dTurn = turn ? -Math.PI / 2 : 0
+      ;[[2.55, -1], [-2.55, 1]].forEach(function (h) {
+        var dx = h[1] < 0 ? -Math.cos(leafA) : Math.cos(leafA), dz = -Math.sin(leafA), c = toW(h[0] + dx * 1.27, 19 + dz * 1.27)
+        var yawL = (h[1] < 0 ? Math.PI - leafA : leafA) + dTurn
+        t.box(wood, 2.5, 2.5, 0.08, c[0], 1.32, c[1], { r: [0, yawL, 0] })
+        ;[0.5, 1.9].forEach(function (by) { t.box(steel, 2.46, 0.08, 0.03, c[0], by, c[1], { r: [0, yawL, 0] }) })
+      })
+      // a dirt path from the gate between the fields
+      slabL(mk(0x9a8162, 1, 'sxh_path'), -2.4, 0, 19.6, 2.4, 0.025, 46)
+      // the courtyard: terracotta paving, a fountain, palms, planted beds
+      slabL(M('brick', { triplanar: true, scale: 1, color: 0xd2aa84 }), -11.5, 0, -3.6, 11.5, 0.04, 18.6)
       var fc = toW(0, 7)
       t.cyl(wm, 2.4, 0.55, fc[0], 0.275, fc[1], { seg: 28 })
       if (K) t.cyl(K.waterM, 2.12, 0.02, fc[0], 0.5, fc[1], { seg: 28 })
@@ -617,6 +804,7 @@ function SXH_layout(api) {
       t.cyl(wm, 0.85, 0.2, fc[0], 1.55, fc[1], { seg: 18, rTop: 0.95 })
       if (K) t.cyl(K.waterM, 0.8, 0.02, fc[0], 1.66, fc[1], { seg: 18 })
       t.col(fc[0] - 2.1, 0, fc[1] - 2.1, fc[0] + 2.1, 0.55, fc[1] + 2.1, 'concrete')
+      t.col(fc[0] - 0.95, 0.55, fc[1] - 0.95, fc[0] + 0.95, 1.75, fc[1] + 0.95, 'concrete')
       ;[[-8, 2.5], [8, 2.5], [-8, 15], [8, 15]].forEach(function (p) { var q = toW(p[0], p[1]); if (K) K.palm(q[0], q[1], 7 + r() * 2, 0.5 + r(), S()) })
       ;[[-10.5, 12, -6.5, 17.5], [6.5, 12, 10.5, 17.5]].forEach(function (b) { slabL(dirty, b[0], 0, b[1], b[2], 0.3, b[3]); for (var k = 0; k < 3; k++) { var q = toW(b[0] + 1 + k * 1.4, (b[1] + b[3]) / 2); api.scrub(q[0], q[1], 0.9, S()) } })
       // outside: the water tower, fields with fences, a corral by the barn, hay
@@ -630,13 +818,41 @@ function SXH_layout(api) {
           ;[0.55, 1.0].forEach(function (y) { var wa = toW(a[0], a[1]), wb = toW(b[0], b[1]); t.rod(wood, [wa[0], y, wa[1]], [wb[0], y, wb[1]], 0.035, { seg: 4 }) })
         }
       }
-      var field = function (x0, z0, x1, z1, mat, gapAt) {
-        fence(x0, z0, x1, z1, gapAt)
-        for (var rx = x0 + 1.0; rx < x1 - 0.6; rx += 1.3) slabL(mat, rx - 0.22, 0, z0 + 0.8, rx + 0.22, mat === cropM ? 0.42 : 0.22, z1 - 0.8)
+      // fields: dark soil, raised rows, a tuft of leaves (or wheat) every 0.4-0.6 m
+      var soilM = mk(0x6a523d, 1, 'sxh_soil'), ridgeM = mk(0x7b5f45, 1, 'sxh_ridge')
+      var cropG = mk(0x6e8e3a, 0.85, 'sxh_crop2', { side: lt.DoubleSide }), wheatM = mk(0xcfae60, 0.9, 'sxh_wheat', { side: lt.DoubleSide })
+      var tufts = function (pts, R, n, u0, u1, mat) {
+        var pos = []
+        pts.forEach(function (p) {
+          var a = spikes(R * (0.75 + r() * 0.5), n, u0, u1, S()).attributes.position.array
+          for (var i = 0; i < a.length; i += 3) pos.push(a[i] + p[0], a[i + 1] + p[1], a[i + 2] + p[2])
+        })
+        var g = new lt.BufferGeometry()
+        g.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+        g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((pos.length / 3) * 2).fill(0), 2))
+        g.computeVertexNormals()
+        t.add(g, mat, {})
       }
-      field(-22, 23, -3.5, 42, cropM, 3)
-      field(3.5, 23, 22, 42, strawM, 3)
-      field(-44, -2, -30, 19, cropM, 1)
+      var field = function (x0, z0, x1, z1, kind, gapAt) {
+        fence(x0, z0, x1, z1, gapAt)
+        slabL(soilM, x0 + 0.25, 0, z0 + 0.25, x1 - 0.25, 0.035, z1 - 0.25)
+        var pts = [], wheat = kind === 'wheat'
+        for (var rx = x0 + 1.0; rx < x1 - 0.6; rx += 1.3) {
+          slabL(ridgeM, rx - 0.32, 0.035, z0 + 0.7, rx + 0.32, 0.17, z1 - 0.7)
+          for (var pz = z0 + 1.0; pz < z1 - 0.9; pz += wheat ? 0.4 : 0.6) { var w = toW(rx + (r() - 0.5) * 0.16, pz + (r() - 0.5) * 0.16); pts.push([w[0], 0.17, w[1]]) }
+        }
+        if (wheat) tufts(pts, 0.8, 7, 0.78, 1, wheatM)
+        else tufts(pts, 0.5, 11, 0.2, 1, cropG)
+        // a few round bales lying in the wheat
+        if (wheat) for (var hb = 0; hb < 3; hb++) {
+          var q = toW(x0 + 2 + r() * (x1 - x0 - 4), z0 + 2 + r() * (z1 - z0 - 4))
+          t.cyl(strawM, 0.75, 1.2, q[0], 0.75, q[1], { axis: r() < 0.5 ? 'x' : 'z', seg: 16 })
+          t.col(q[0] - 0.7, 0, q[1] - 0.7, q[0] + 0.7, 1.45, q[1] + 0.7, 'wood')
+        }
+      }
+      field(-22, 23, -3.5, 42, 'crop', 3)
+      field(3.5, 23, 22, 42, 'wheat', 3)
+      field(-44, -2, -30, 19, 'crop', 1)
       fence(30, 5, 43, 16, 3)
       ;[[29, -15], [31, -15.5], [30, -17]].forEach(function (p) { var q = toW(p[0], p[1]); t.cyl(strawM, 0.7, 1.2, q[0], 0.7, q[1], { axis: turn ? 'x' : 'z', seg: 14 }); t.col(q[0] - 0.7, 0, q[1] - 0.7, q[0] + 0.7, 1.4, q[1] + 0.7, 'wood') })
       var tc = toW(27.5, 4); api.truck(tc[0], tc[1], (turn ? 0 : Math.PI / 2) + 0.2, { paint: 'paint_white' })
@@ -648,14 +864,14 @@ function SXH_layout(api) {
   }
 
   // ---- every site: plan, build, lift onto its pad
-  var ui = 0
+  var ui = 0, allPanes = []
   SXH_SITES.forEach(function (s) {
     var r = SXD_rng(s.id.length * 131 + Math.round(s.x * 7 + s.z * 3))
     var Y = SXH_y(s)
     var n0 = t.staticRoot.children.length, d0 = t.dynRoot.children.length, b0 = G.physics.boxes.length, p0 = t.placed.length
     var plan = s.kind === 'town' ? planTown(s, r) : s.kind === 'ranch' ? planRanch(s, r) : planGroup(s, r)
     var buckets = new Map(), inner = new lt.Group(), far = new lt.Group()
-    var ctx = { inner: inner, far: far, bucket: function (m) { if (!buckets.has(m)) buckets.set(m, { pos: [], nrm: [], uv: [] }); return buckets.get(m) } }
+    var ctx = { r: r, panes: [], loot: [], inner: inner, far: far, bucket: function (m) { if (!buckets.has(m)) buckets.set(m, { pos: [], nrm: [], uv: [] }); return buckets.get(m) } }
     plan.units.forEach(function (u) { house(u, ui++, ctx) })
     buckets.forEach(function (bk, m) {
       if (!bk.pos.length) return
@@ -675,6 +891,8 @@ function SXH_layout(api) {
     t.placed.slice(p0).forEach(function (p) { p.y += Y })
     var boxes = G.physics.boxes.splice(b0, G.physics.boxes.length - b0)
     boxes.forEach(function (b) { b.min.y += Y; b.max.y += Y })
+    ctx.panes.forEach(function (p) { p.c.y += Y; p.y0 += Y; allPanes.push(p) })
+    ctx.loot.forEach(function (l) { l.pos.y += Y; SXH_LOOT.push(l) })
     if (typeof SXD_GROUPS !== 'undefined') SXD_GROUPS.push({ site: s, nodes: nodes })
     // the insides (merged on their own: drawn near only) and their far stand-in
     var mi = By(inner), mf = By(far)
@@ -715,6 +933,17 @@ function SXH_layout(api) {
       if (b.holder && b.holder.visible !== vis) b.holder.visible = vis
     })
   })
+  // the glass: the Crossroads map's panes, shards and window vault (crossroads/crossroads.js)
+  if (typeof CXR_glassBuild === 'function' && allPanes.length) {
+    try {
+      CXR_glassBuild(t.dynRoot, allPanes)
+      t.updaters.push(function (dt) {
+        if (!CXR_GL.on && window.__ready && G.player && G.physics) CXR_glassInstall(G)
+        CXR_shardTick(dt)
+      })
+    } catch (e) { console.error('[houses] glass', e) }
+  }
+  SXH_ST.panes = allPanes.length; SXH_ST.loot = SXH_LOOT.length
   SXH_models(t)
   window.__sxh = SXH_ST // tests
 }
