@@ -26,10 +26,14 @@
     return m === 'desert' || m === 'crossroads' || m === 'waterworks' ? m : 'port'
   }
   // the files this map uses; late: true / false keeps only the late / the boot ones
+  // single files another map borrows, late there: the desert's Crossroads-
+  // style houses (houses/houses.js) use the old-apartment model and its brick
+  var ALSO = { cx_oldap: 'desert', cx_skin_oabrick: 'desert' }
   function want(map, all, late) {
     return LIST.filter(function (a) {
-      if (late != null && !!LATE[a[3]] !== late) return false
-      return all || !ONLY[a[3]] || ONLY[a[3]] === map
+      var also = ALSO[a[0]] === map
+      if (late != null && (!!LATE[a[3]] || also) !== late) return false
+      return all || !ONLY[a[3]] || ONLY[a[3]] === map || also
     })
   }
   // one download (retried once): job.got counts the bytes in so far,

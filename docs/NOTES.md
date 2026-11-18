@@ -62,13 +62,14 @@ Trước đây mọi model nằm trong một file `index.html` 20 MB (khoảng 1
 - **Build (`build.py`):** mỗi file trong `<feature>/assets/` được chép ra `dist/assets/<tên>.<hash 10 ký tự>.<đuôi>`. Tên có hash theo nội dung, nên file không đổi thì giữ nguyên tên và trình duyệt dùng lại bản đã lưu; file đổi thì tên mới, không bao giờ lẫn bản cũ. File cũ không còn dùng được tự xoá khỏi `dist/assets/`. Danh sách `[tên, đường dẫn, số byte, feature]` được ghi vào `game/preload.js`.
 - **Tải sớm (`game/preload.js`, trong `<head>`):** chạy trước khi code game (2,4 MB) tải xong. Script đọc map đang chọn (cùng quy tắc với `SX_MAP`: `?map=` rồi đến `localStorage`), bắt đầu tải các file map đó cần (song song) và hiện "Downloading models x / y MB" trên thanh loading, chiếm 40% đầu thanh.
 - **Map nào tải gì:** file của `desert`, `aircraft`, `cars`, `jets` chỉ tải ở map sa mạc, file của `crossroads` chỉ tải ở Crossroads (bảng `ONLY` trong `game/preload.js`). File của mọi feature khác (`arsenal`, `troopers`…) tải ở mọi map. `?show=` tải tất cả.
+- **File mượn của map khác (bảng `ALSO`):** nhà kiểu Crossroads ở sa mạc (`houses/`) dùng model căn hộ `cx_oldap` và texture gạch `cx_skin_oabrick` của Crossroads (0,3 MB). Ở sa mạc hai file này tải muộn; Crossroads vẫn tải chúng như cũ.
 - **Tải muộn (bảng `LATE` trong `game/preload.js`: `aircraft`, `cars`, `jets`):** các model trực thăng, xe, máy bay (6,1 MB) không bắt boot chờ. Chúng tải ngầm ngay sau boot (`SX_assetLater` trong `common/common.js`). Trong lúc chờ, xe và máy bay dùng hình dựng bằng code; model về thì tự thay (các đoạn "swap the look" có sẵn trong `aircraft/`, `cars/`, `jets/`). Các hàm `SXH_gzStart`, `SXC_bgStart`, `SXJ_suStart`… chờ `SX_assetLater(tên, SX_ASSET_tên)` thay vì báo hỏng ngay. Bản `--single` có sẵn chuỗi nên chạy như cũ.
 
   | Map | Phải chờ trước khi vào | Tải ngầm sau đó | Lần đầu tổng cộng (cả trang) |
   |---|---|---|---|
   | Cảng, Waterworks | 4,9 MB (14 file) | — | ≈ 5,7 MB |
   | Crossroads | 7,0 MB (27 file) | — | ≈ 7,7 MB |
-  | Sa mạc | 5,0 MB (15 file) | 6,1 MB (7 file) | ≈ 11,6 MB, nhưng chỉ chờ ≈ 5,8 MB |
+  | Sa mạc | 5,0 MB (15 file) | 6,4 MB (9 file) | ≈ 11,9 MB, nhưng chỉ chờ ≈ 5,8 MB |
 
   Lần sau, kể cả sau khi deploy bản sửa code: chỉ tải lại khoảng 0,8 MB của `index.html`, cộng với model nào vừa đổi.
 - **Boot (`SX_bootAssets` trong `common/common.js`, gọi đầu `QC()` ở `game/js/90_boot.js`):** chờ các file tải xong, đổi mỗi file sang base64 và gán vào `window.SX_ASSET_<tên>`, đúng chuỗi mà bản `--single` nhúng sẵn. Nhờ vậy code các feature không phải sửa. `Nr` (`game/js/10_game.js`) xếp các bước boot vào 60% còn lại của thanh.
@@ -485,7 +486,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 
 - **Đi lại trên địa hình:** đê cát và đồi cát leo được. Vật lý của game (đi lại, đạn, lựu đạn, tầm nhìn của địch, đồ rơi) dùng độ cao địa hình `SXD_TH`. Độ cao này được nướng sẵn thành lưới 1,25 m từ `SXD_terrainHeight` lúc tải map.
 - **Vùng được đi:** cả map, bán kính `SXD_PLAY_R` = 1500 m quanh trạm bơm (trước đây 560 m). Đi bộ hay lái xe đều tới được mép; gần mép (còn 22 m) thì game cảnh báo, tới mép thì bị chặn lại. Đi bộ không leo được sườn dốc hơn `SXD_MAX_SLOPE` (khoảng 46°, ví dụ vách núi mesa).
-- **Dữ liệu độ cao:** lưới 2 m phủ ±600 m, tạo sẵn lúc tải map (khoảng 0,4 s). Mặt đất gần người chơi được dựng thành các khối 100 m từ chính lưới này, nên phần nhìn thấy khớp với phần va chạm. Có 2 mức chi tiết, đổi ở khoảng cách 200 m. Mức xa dùng ô 10 m (trước đây bước 4 trên 50 ô lưới ra 12,5 ô, nên khối xa bị dựng lệch tam giác).
+- **Dữ liệu độ cao:** lưới 2 m phủ ±600 m, tạo sẵn lúc tải map (khoảng 0,7 s từ khi có thêm núi và nền nhà). Mặt đất gần người chơi được dựng thành các khối 100 m từ chính lưới này, nên phần nhìn thấy khớp với phần va chạm. Có 2 mức chi tiết, đổi ở khoảng cách 200 m. Mức xa dùng ô 10 m (trước đây bước 4 trên 50 ô lưới ra 12,5 ô, nên khối xa bị dựng lệch tam giác).
 - **Ngoài ±600 m (cả map lái được):**
   - **Độ cao:** cùng lưới 2 m, chia thành ô 100 m (`SXD_tile`), mỗi ô tính từ `SXD_terrainHeight` lần đầu có thứ cần tới (bánh xe, chân, đạn, phần hiển thị), khoảng 3 ms một ô, rồi giữ lại. Phủ tới `SXD_WORLD_R` = 1560 m; xa hơn là mặt phẳng.
   - **Hiển thị** (`SXD_streamer`): mọi ô trong 560 m quanh camera có mesh riêng (2 m trong 230 m, 10 m xa hơn), dựng dần mỗi khung hình 1 ô 2 m + 3 ô 10 m, ô gần trước; ô xa quá 720 m thì bỏ. Vòng địa hình thô (lưới cực) bị cắt bỏ (discard) trong vòng tròn mà các ô đã phủ kín (`uSdHide`), nên chỗ đó hiện đúng mặt đất chi tiết, khớp với phần va chạm. Vòng thô giờ không đổ bóng (nó có thể nhô lên trên mặt chi tiết và phủ bóng sai).
@@ -493,7 +494,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - **Đường cao tốc** ngoài ±600 m: mỗi đỉnh có 2 độ cao, trên mặt chi tiết (`aFine`, dùng trong vòng tròn chi tiết) và nhấc lên trên vòng thô (dùng ngoài vòng); shader đỉnh chọn theo vị trí.
   - **Minimap** phủ cả map (`SXD_WORLD_R`, ảnh 2048 px, khoảng 1,5 m/điểm ảnh, lưới vạch 500 m). Ngoài lưới tạo sẵn, độ cao lấy thưa mỗi 4 điểm ảnh rồi nội suy (vẽ mất khoảng 0,3 s lúc tải). Mở bản đồ lớn thì phóng sẵn 3,5×, phóng tối đa 30×.
   - **Đã thử:** đứng ở cách trạm 1,2 km thì đứng đúng trên mặt đất, 108 ô được dựng (15 ô 2 m), vòng chi tiết phủ đủ 552 m, 60 FPS; nhìn 4 hướng không có lỗ hay đường nối. Lái Sandcat (bật tăng tốc) ra mép: dừng ở 1,48 km rồi bị đẩy lại.
-- **Đường lên núi** (`SXD_mesaRamps`, `SXD_rampLift`): mỗi núi mesa có một con dốc đắp thẳng từ mặt đất lên mặt đỉnh, dốc 0,32 (khoảng 18°), mặt dốc rộng 8 m, hai bên đổ xuống 1,5 m mỗi mét và phía đỉnh cũng đổ xuống, nên con dốc luôn gặp mặt đất, không thành bức tường. Hướng dốc chọn một lần trong 36 hướng: tránh khu căn cứ, các núi khác, các cứ điểm và đường cao tốc, rồi ưu tiên hướng nhìn về căn cứ. Cả 8 con dốc đều tìm được hướng không vướng gì. Con dốc nằm trong `SXD_terrainHeight`, nên va chạm, hiển thị, minimap và vòng thô đều thấy giống nhau.
+- **Đường lên núi** (`SXD_mesaRamps`, `SXD_rampLift`): mỗi núi mesa có một con dốc đắp thẳng từ mặt đất lên mặt đỉnh, dốc 0,32 (khoảng 18°), mặt dốc rộng 8 m, hai bên đổ xuống 1,5 m mỗi mét và phía đỉnh cũng đổ xuống, nên con dốc luôn gặp mặt đất, không thành bức tường. Hướng dốc chọn một lần trong 36 hướng: tránh khu căn cứ, các núi khác, các cứ điểm, nền nhà (`houses/`), đường cao tốc và mép map, rồi ưu tiên hướng nhìn về căn cứ. Cả 22 con dốc đều tìm được hướng không vướng gì; 8 con dốc cũ giữ nguyên hướng. Con dốc nằm trong `SXD_terrainHeight`, nên va chạm, hiển thị, minimap và vòng thô đều thấy giống nhau.
   - **Đã thử:** lái tự động (bám trục con dốc) lên núi phía tây (cao 72 m): Sandcat lên tới đỉnh sau khoảng 12 giây, Rhino khoảng 17 giây. Sau khi đổi hình núi (mục dưới), Sandcat vẫn lên tới đỉnh.
 - **Hình núi** (`SXD_mesaH`, chỉnh ở `SXD_MESA_TUNE`; nằm trong `SXD_terrainHeight`, nên va chạm, minimap và vòng thô khớp theo):
   - Mặt đỉnh phẳng tới mép (viền fbm như cũ). Mỗi núi có 4 khe xói khía vào mép đỉnh (sâu 9–22 m, rộng 10–22 m), không có khe nào trong khoảng ±31° quanh hướng con dốc.
@@ -516,6 +517,11 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Texture mặt đường (`desert/assets/road_ludlow.webp`, 31 KB) cắt từ bản scan `terrain_model_and_rock_features_near_ludlow_ca.glb`, gồm vạch vàng giữa, vạch trắng hai mép và lề sỏi. Tác giả ghi trong `CREDITS.md`.
   - Đường là một phần của mặt đất: `SXD_terrainHeight` san phẳng nền đường (dốc tối đa 5%, taluy 1:2), nên đi bộ, bánh xe và đạn đều khớp với mặt đường nhìn thấy. Chỗ cắt đường băng, mặt đường bằng đường băng.
   - Cột điện gỗ dọc lề đông, có dây võng. Minimap vẽ đường.
+- **Thêm núi** (`SXD_MESAS`, 8 → 22):
+  - 14 núi ở vòng ngoài (700–1400 m): 11 mesa bè (bán kính 70–150 m, cao 45–70 m) và 3 núi trụ hẹp, cao (bán kính 45–55 m, cao 70–78 m). Cùng hình vách tầng, khe xói, sườn đá vụn và con dốc lên đỉnh như các mesa cũ.
+  - Vị trí kiểm bằng script: chân núi (bán kính ×1,3 + 148 m) không chạm cứ điểm, nền nhà, đường cao tốc hay núi khác.
+  - Bake lưới độ cao: các vòng lặp mesa và nền nhà loại nhanh bằng hộp bao trước khi tính khoảng cách.
+- **Dãy núi chân trời** (`SXD_PEAKS`, `SXD_peakH`): 17 đỉnh (bán kính 420–600 m, cao 150–270 m, có 2 đèo) ở 1,8–2,2 km quanh map. Chúng chỉ mọc từ `SXD_PLAY_R - 50` trở ra (`SXD_terrainBase` nhân với hệ số tăng dần tới +150 m), nên phần chơi được không đổi; đứng ở vùng ngoài sẽ thấy núi khép kín chân trời.
 
 ## units (khung cho robot to và xe lái được)
 
@@ -555,11 +561,34 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - **Bunker Line** (420 / -1120): boongke bê tông vào được (cửa phía nam, khe bắn phía bắc), 2 lô cốt, hàng "răng rồng" chống xe, 6 ụ súng. Lính gác lớn là Colossus.
   - Vị trí được chọn để không đụng đường cao tốc, núi mesa và các cứ điểm khác; con dốc lên núi và cột điện ven đường không đổi.
 - **Marker trên màn hình:** đỏ là của địch, xanh là của mình. Kèm khoảng cách và số lính gác còn lại. Hiện cho mọi cứ điểm trên map; cứ điểm xa hơn 650 m thì marker mờ và nhỏ hơn.
-- **Hiệu năng** (`SXO_split`, gọi từ `SXD_level` sau bước gộp nhãn):
-  - Mỗi cứ điểm được gộp thành một nhóm mesh riêng (`outpost-<id>`), không nhập vào mesh chung `level-merged` của cả map. Mesh chung trải khắp sa mạc nên lúc nào cũng phải vẽ (kể cả shadow pass); nhóm riêng thì bị frustum culling bỏ khi nằm ngoài tầm nhìn.
-  - Cứ điểm cách camera hơn `SXO_DRAW` (1000 m, tính từ mép) thì không vẽ. Ở khoảng đó sương đã che gần hết và đồi cát thường chắn tầm nhìn; marker vẫn hiện.
+- **Hiệu năng** (`SXD_splitGroups` trong `desert/desert.js`, gọi từ `SXD_level` sau bước gộp nhãn; cứ điểm và nhà đều dùng):
+  - Mỗi cứ điểm được gộp thành một nhóm mesh riêng (`site-<id>`), không nhập vào mesh chung `level-merged` của cả map. Mesh chung trải khắp sa mạc nên lúc nào cũng phải vẽ (kể cả shadow pass); nhóm riêng thì bị frustum culling bỏ khi nằm ngoài tầm nhìn.
+  - Cứ điểm cách camera hơn `SXD_GROUP_DRAW` (1000 m, tính từ mép) thì không vẽ. Ở khoảng đó sương đã che gần hết và đồi cát thường chắn tầm nhìn; marker vẫn hiện.
   - Đo ở điểm xuất phát (4 hướng nhìn): số tam giác mỗi frame giảm từ 1,0–1,8 triệu xuống 0,66–1,4 triệu so với trước khi có 7 cứ điểm mới, dù cả scene có thêm khoảng 400 nghìn tam giác.
-- **Hàm dựng riêng của cứ điểm:** `watchtower`, `bunker`, `pillbox`, `tooth`, `gravel`, `crushed`, `crane`, `well`, `pond`, `palm` (lá cọ là dải cong thon gập chữ V, vật liệu hai mặt), `conveyor`, `guyWires`. Nước ao và giếng dùng vật liệu `sxo_water` (xanh lục đậm, bóng, gợn sóng cố định). `SXD_level` đưa thêm `pumpjack` vào API cho cứ điểm dùng.
+- **Hàm dựng riêng của cứ điểm** (`SXO_kit(api)`, feature `houses` dùng lại cây cọ và nước): `watchtower`, `bunker`, `pillbox`, `tooth`, `gravel`, `crushed`, `crane`, `well`, `pond`, `palm` (lá cọ là dải cong thon gập chữ V, vật liệu hai mặt), `conveyor`, `guyWires`. Nước ao và giếng dùng vật liệu `sxo_water` (xanh lục đậm, bóng, gợn sóng cố định). `SXD_level` đưa thêm `pumpjack` vào API cho cứ điểm dùng.
+
+## houses (nhà, thị trấn, trang trại trên map sa mạc)
+
+`houses/houses.js`, danh sách `SXH_SITES`. Mỗi nơi có một nền phẳng san ở độ cao bằng khoảng 85 % độ cao trung bình của đồi cát quanh đó (đào nhiều hơn đắp), rồi hoà dần vào đồi trong 20–30 m (`SXH_pad`, gọi từ `SXD_terrainBase`). Vì vậy nhà không nằm trong hố.
+
+- **Hai loại nhà, đều vào được:**
+  - `apt`: đúng khối căn hộ gạch 4 tầng của map Crossroads. Mặt tiền là model `cx_oldap` (cắt bỏ kính, cửa, mặt mái và các mặt tường giống Crossroads), gạch `cx_skin_oabrick` phủ lên tường, có ô cửa sổ. Trước khi model tải xong thì tường màu gạch trơn.
+  - `block`: nhà trát vữa 1–5 tầng, 7 màu sa mạc (vật liệu `sxh_stucco`: màu đều, vân nhiễu nhẹ và vệt mưa theo toạ độ thế giới, không cần UV). Có gờ chân tường, gờ từng tầng, gờ mái. Mái bằng có lan can; nhà ở trang trại có mái ngói dốc bốn phía (`hip`) hoặc hai phía (`gable`, đầu hồi trát vữa).
+  - Bên trong giống Crossroads: tường có ô cửa sổ (1,3 × 1,4 m, bệ cao 1 m), cửa trước và cửa sau, sàn mỗi tầng, cầu thang gấp khúc 2 làn dọc tường sau (bậc 0,295 m), mái bằng thì có lối lên mái, mỗi tầng một thùng gỗ và một bàn thấp, vài nhà có cửa hàng ở tầng trệt (quầy, kệ, biển hiệu `SXH_SIGNS`, mái hiên).
+  - Thêm: bồn nước trên mái (1–2 cái trên chân sắt), máy lạnh, cầu thang thoát hiểm bên hông nhà 3 tầng trở lên (chỉ để nhìn, sàn nghỉ có va chạm), hiên cột (nhà chính trang trại).
+- **Các nơi:**
+  - **Dustwater** (230 / -640, bán kính 80 m) và **Copper Flats** (380 / 760, 75 m): một phố chính trải nhựa có vỉa hè và một phố cắt ngang; 17–18 nhà quay mặt ra phố, nhà cao (3–5 tầng, căn hộ gạch) ở giữa, nhà thấp ra rìa; cột điện và dây dọc phố, xe đỗ, thùng rác, thùng phuy, cây Joshua và cây cọ.
+  - **Old Ranch** (-380 / 1060, 52 m): tường bao 2,6 m có mái ngói, cổng trước có trụ và dầm, cổng sau, cổng hông ra nhà kho; nhà chính 2 tầng mái ngói bốn phía có hiên cột, hai dãy nhà ngang mái hai phía quanh sân trong có đài phun nước, cây cọ, bồn cây; bên ngoài có nhà kho lớn, nhà kho nhỏ, tháp nước, 3 ruộng có hàng rào gỗ, bãi quây, rơm.
+  - 4 cụm 2–3 nhà và 12 nhà lẻ (chọn chỗ bằng cách lấy điểm xa nhất trên vùng đất trống).
+  - Tất cả được kiểm bằng script để không chạm núi, cứ điểm, đường cao tốc và nhau. Bố cục là của riêng game này: chỉ lấy ý chung "thị trấn sa mạc nhiều nhà tầng" và "trang trại có tường bao", không chép bố cục của game nào.
+- **Cách dựng** (`SXH_layout`, gọi từ `SXD_level` sau cứ điểm): dựng mọi thứ ở y = 0 bằng các hàm dựng sẵn có (`SXO_kit`, `api.truck`, `place`…), rồi nhấc cả mesh, prop và collider lên độ cao nền. Phần ngoài của mỗi nơi là một nhóm mesh riêng (`SXD_GROUPS`). Phần trong (tường trong, sàn, cầu thang, đồ đạc) gộp thành nhóm khác, chỉ vẽ khi camera trong `SXH_INSIDE` (220 m); xa hơn thì thay bằng một khối tối trong mỗi nhà, để nhìn qua cửa sổ không thấy xuyên.
+- **Va chạm theo khoảng cách** (physics duyệt mọi hộp cho mỗi tia đạn và mỗi bước đi):
+  - Vỏ (tường, mái, lan can, bồn nước, tường rào): chỉ có trong physics khi có người chơi trong `SXH_ACTIVE` (450 m) của nơi đó.
+  - Bên trong (bậc thang, sàn, bàn, thùng, quầy): chỉ khi trong `SXH_ACTIVE_IN` (160 m).
+  - Chơi online: tính theo người chơi gần nhất (`SXN_nearestOps`).
+  - Đo: ở điểm xuất phát vẫn là 991 hộp như trước. Đứng giữa Dustwater có 3271 hộp, một tia đạn mất khoảng 18 µs (bình thường khoảng 8 µs).
+- **Bản đồ:** nền nhà và tường rào vẽ lên ảnh nền bản đồ như các công trình khác; tên Dustwater, Copper Flats, Old Ranch hiện trên bản đồ lớn (biểu tượng ngôi nhà).
+- **Đã kiểm tra** (Chrome headless): đi qua cửa vào nhà, leo hết 5 đoạn cầu thang của một nhà 5 tầng lên mái (16,25 m) và đoạn đầu của căn hộ gạch; cả 4 map chạy nhiệm vụ và Sinh tồn không lỗi; bản tách file tải `cx_oldap` và gạch muộn ở sa mạc, Crossroads không đổi.
 
 ## troopers (lính địch hình người, cả 2 map)
 
@@ -598,7 +627,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - M hoặc Esc để đóng.
   - Lưới ô vuông đánh chữ A–F và số 1–6, mỗi ô 200 m trên map sa mạc.
 - **Hình nền bản đồ:**
-  - Map sa mạc: vẽ một lần lúc tải map, từ lưới độ cao (đổ bóng đồi) cộng với vị trí các công trình (lấy từ hộp va chạm).
+  - Map sa mạc: vẽ một lần lúc tải map, từ lưới độ cao (đổ bóng đồi) cộng với vị trí các công trình (lấy từ hộp va chạm; nhà thì lấy nền nhà và tường rào từ `houses/`, vì va chạm của nhà chỉ bật khi có người ở gần).
   - Map cảng: vẽ từ container trên nền nhựa đường và mặt biển.
 
 ## Xe, robot, máy bay (map sa mạc)

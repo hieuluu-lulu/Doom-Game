@@ -4,7 +4,7 @@ Game bắn súng góc nhìn thứ nhất chạy trên trình duyệt, không c�
 
 **Chơi ngay:** https://hieuluu-lulu.github.io/Doom-Game/
 
-- **4 map:** cảng, sa mạc (rộng 3 km, 11 cứ điểm để chiếm), phố Crossroads, trạm nước Waterworks
+- **4 map:** cảng, sa mạc (rộng 3 km: 11 cứ điểm để chiếm, 2 thị trấn, trang trại, hơn 60 ngôi nhà vào được, 22 núi), phố Crossroads, trạm nước Waterworks
 - **Chơi một mình:** nhiệm vụ cắt relay, hoặc **Sinh tồn** (robot đến theo đợt, lưu kỷ lục); 3 độ khó Easy / Normal / Hard
 - **Thống kê và 14 thành tích**, lưu ngay trên máy; đổi phím trong Settings
 - **Chơi offline và cài như app** (Settings → Offline play): map đã chơi mở được khi mất mạng

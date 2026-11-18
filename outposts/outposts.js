@@ -76,7 +76,10 @@ var SXO_SITES = [
 ]
 
 // ---------------------------------------------------------------- layout
-function SXO_layout(api) {
+// The builders the sites share (villages/villages.js uses them too), all at
+// y = 0 — the floor of a site's bowl; a village lifts what it built onto its
+// own pad afterwards. Returns the helpers and a seed counter.
+function SXO_kit(api) {
   var t = api.t, place = api.place, M = api.M, ts = api.ts
   var tarp = M('tarp'), plaster = M('sxd_plaster'), steel = M('steel_dark'), white = M('paint_white'), conc = M('concrete_dirty'), blue = M('paint_blue')
   var seed = 500
@@ -322,13 +325,19 @@ function SXO_layout(api) {
     })
   }
 
-  SXO_GROUPS = []
+  return { S: S, tent: tent, helipad: helipad, flag: flag, hut: hut, dish: dish, watchtower: watchtower, bunker: bunker, pillbox: pillbox, tooth: tooth, gravel: gravel, crushed: crushed, crane: crane, well: well, pond: pond, palm: palm, conveyor: conveyor, guyWires: guyWires, waterM: waterM, frondM: frondM }
+}
+
+function SXO_layout(api) {
+  var t = api.t, place = api.place, M = api.M, ts = api.ts, blue = M('paint_blue')
+  var K = SXO_kit(api), S = K.S
+  var tent = K.tent, helipad = K.helipad, flag = K.flag, hut = K.hut, dish = K.dish, watchtower = K.watchtower, bunker = K.bunker, pillbox = K.pillbox, tooth = K.tooth
+  var gravel = K.gravel, crushed = K.crushed, crane = K.crane, well = K.well, pond = K.pond, palm = K.palm, conveyor = K.conveyor, guyWires = K.guyWires
   SXO_SITES.forEach(function (site) {
     var X = site.x, Z = site.z
     var P = function (dx, dz) { return [X + dx, Z + dz] }
     var p
     var n0 = t.staticRoot.children.length
-    SXO_GROUPS.push({ site: site, from: n0 })
     if (site.id === 'mirage') {
       tent(X - 8, Z + 6, 0.1, 6, 4, 2.6)
       tent(X - 1, Z + 11, ts, 5, 3.6, 2.4)
@@ -580,40 +589,9 @@ function SXO_layout(api) {
       api.rockCluster(X + 24, Z - 12, 3, 1.4, S())
       api.rockCluster(X - 23, Z + 18, 3, 1.3, S())
     }
-    SXO_GROUPS[SXO_GROUPS.length - 1].nodes = t.staticRoot.children.slice(n0)
+    // its own merged group (SXD_splitGroups), so it culls
+    if (typeof SXD_GROUPS !== 'undefined') SXD_GROUPS.push({ site: site, nodes: t.staticRoot.children.slice(n0) })
   })
-}
-
-// Each site's meshes get their own merged group instead of joining the
-// map-wide 'level-merged' one (whose bounds span the whole desert, so it is
-// drawn — and shadow-cast — every frame from anywhere). Per site, frustum
-// culling works and a site past SXO_DRAW m from the camera is not drawn at
-// all (the haze has swallowed it by then; the marker still shows). Called by
-// SXD_level after the label atlas, before the big merge.
-var SXO_GROUPS = []
-var SXO_DRAW = 1000
-function SXO_split(t, root) {
-  var groups = SXO_GROUPS
-  SXO_GROUPS = []
-  var parts = []
-  groups.forEach(function (gr) {
-    if (!gr.nodes || !gr.nodes.length) return
-    var g = new lt.Group()
-    gr.nodes.forEach(function (n) { if (n.parent === t.staticRoot) g.attach(n) })
-    var m = By(g)
-    m.name = 'outpost-' + gr.site.id
-    root.add(m)
-    parts.push({ obj: m, x: gr.site.x, z: gr.site.z, r: gr.site.r })
-  })
-  var cam = t.G.camera
-  t.updaters.push(function () {
-    var e = cam.matrixWorld.elements, cx = e[12], cz = e[14]
-    for (var k = 0; k < parts.length; k++) {
-      var q = parts[k], on = Math.hypot(cx - q.x, cz - q.z) - q.r < SXO_DRAW
-      if (q.obj.visible !== on) q.obj.visible = on
-    }
-  })
-  return parts
 }
 
 // ----------------------------------------------------- shared unit helpers

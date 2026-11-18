@@ -110,7 +110,16 @@ function SXM_build(G) {
       line(Math.max(1, 0.8 / mpp), 'rgba(226,186,70,0.85)')
     }
     // collider footprints = buildings, containers, walls, rocks
-    var boxes = G.physics && G.physics.boxes || []
+    var boxes = (G.physics && G.physics.boxes || []).slice()
+    // the houses' colliders only join the physics near a player (houses/houses.js):
+    // their footprints and their outside walls (the ranch's) from the feature itself
+    if (desert && typeof SXH_ST !== 'undefined' && SXH_ST.built) SXH_ST.built.forEach(function (b) {
+      b.units.forEach(function (u) { boxes.push({ min: { x: u.a, y: 0, z: u.c }, max: { x: u.b, y: 9, z: u.d } }) })
+      ;(b.shell || []).forEach(function (bx) {
+        var mine = b.units.some(function (u) { return bx.min.x >= u.a - 1.5 && bx.max.x <= u.b + 1.5 && bx.min.z >= u.c - 1.5 && bx.max.z <= u.d + 1.5 })
+        if (!mine) boxes.push(bx)
+      })
+    })
     var toPx = function (wx, wz) { return [(wx - W.x0) / mpp, (wz - W.z0) / mpp] }
     // waterworks: the settling basin's water under the footprints
     if (plant && typeof WW_BASIN !== 'undefined') {
@@ -158,6 +167,8 @@ function SXM_build(G) {
     if (lv.extraction && lv.extraction.pos && !window.SXN_MP) out.push({ x: lv.extraction.pos.x, z: lv.extraction.pos.z, kind: 'extract', text: 'EX', done: !allCut })
     if (U) {
       ;(U.outposts || []).forEach(function (s) { out.push({ x: s.def.x, z: s.def.z, kind: 'outpost', text: s.def.name, hostile: s.status === 'hostile', left: s.left }) })
+      // the towns and the ranch (houses feature)
+      if (U.desert && typeof SXH_SITES !== 'undefined') SXH_SITES.forEach(function (s) { if (s.name) out.push({ x: s.x, z: s.z, kind: 'place', text: s.name }) })
       U.list.forEach(function (u) {
         if (!u.alive) return
         var air = u.solid && u.solid.air || u.type === 'kestrel' || u.type === 'skua' || u.type === 'petrel'
@@ -198,6 +209,16 @@ function SXM_build(G) {
         ctx.font = '700 ' + Math.round(s * 1.05) + 'px ' + font; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(11,13,15,0.85)'; ctx.strokeText(m.text.toUpperCase(), 0, s * 1.4)
         ctx.fillStyle = oc; ctx.fillText(m.text.toUpperCase(), 0, s * 1.4)
+      }
+    } else if (m.kind === 'place') {
+      // a little house: walls and a roof, the name under it on the big map
+      var pc = '#e8dcc4'
+      ctx.fillStyle = 'rgba(11,13,15,0.55)'; ctx.strokeStyle = pc
+      ctx.beginPath(); ctx.moveTo(-s * 0.8, s * 0.75); ctx.lineTo(-s * 0.8, -s * 0.05); ctx.lineTo(0, -s * 0.8); ctx.lineTo(s * 0.8, -s * 0.05); ctx.lineTo(s * 0.8, s * 0.75); ctx.closePath(); ctx.fill(); ctx.stroke()
+      if (full) {
+        ctx.font = '700 ' + Math.round(s * 1.05) + 'px ' + font; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(11,13,15,0.85)'; ctx.strokeText(m.text.toUpperCase(), 0, s * 1.1)
+        ctx.fillStyle = pc; ctx.fillText(m.text.toUpperCase(), 0, s * 1.1)
       }
     } else if (m.kind === 'vehicle') {
       ctx.fillStyle = '#7fd6ff'; ctx.strokeStyle = 'rgba(11,13,15,0.9)'

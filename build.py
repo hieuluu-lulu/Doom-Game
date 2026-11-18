@@ -60,7 +60,7 @@ GAME = os.path.join(HERE, 'game')
 DIST = os.path.join(HERE, 'dist', 'index.html')
 COPY = os.path.join(HERE, '..', 'doomzone.html')
 FEATURES = ['common', 'desert', 'crossroads', 'waterworks', 'arsenal', 'units', 'walkers', 'aircraft', 'cars', 'driver', 'jets',
-            'outposts', 'troopers', 'minimap', 'menu', 'view', 'score', 'modes', 'stats', 'keys', 'offline', 'net', 'perf', 'shots', 'gunfx']
+            'outposts', 'houses', 'troopers', 'minimap', 'menu', 'view', 'score', 'modes', 'stats', 'keys', 'offline', 'net', 'perf', 'shots', 'gunfx']
 SPLIT_AFTER = '10_game.js'  # the features go right after this slice of the game script
 ASSET_DIR = 'assets'  # beside the page, split build
 ASSET_NAME = re.compile(r'^[A-Za-z0-9_]+\.[0-9a-f]{10}\.[A-Za-z0-9]+$')  # <stem>.<hash>.<ext>

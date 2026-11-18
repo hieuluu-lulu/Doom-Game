@@ -280,7 +280,39 @@ function SXD_rockGeo(seed, sx, sy, sz) {
 // Layout of the playable basin (the berms start right outside it).
 var SXD_BOUND = { x0: -38, x1: 29.5, z0: -30.5, z1: 28.8 }
 
+// Sites (outposts, houses) build their meshes into the level as usual and
+// list them here ({site: {x, z, r}, nodes: [staticRoot children]}). Each gets
+// its own merged group instead of joining the map-wide 'level-merged' one
+// (whose bounds span the whole desert, so it is drawn — and shadow-cast —
+// every frame from anywhere): per site, frustum culling works, and a site
+// past SXD_GROUP_DRAW m from the camera is not drawn at all.
+var SXD_GROUPS = []
+var SXD_GROUP_DRAW = 1000
+function SXD_splitGroups(t, root) {
+  var groups = SXD_GROUPS, parts = []
+  SXD_GROUPS = []
+  groups.forEach(function (gr) {
+    if (!gr.nodes || !gr.nodes.length) return
+    var g = new lt.Group()
+    gr.nodes.forEach(function (n) { if (n.parent === t.staticRoot) g.attach(n) })
+    var m = By(g)
+    m.name = 'site-' + gr.site.id
+    root.add(m)
+    parts.push({ obj: m, x: gr.site.x, z: gr.site.z, r: gr.site.r })
+  })
+  var cam = t.G.camera
+  t.updaters.push(function () {
+    var e = cam.matrixWorld.elements, cx = e[12], cz = e[14]
+    for (var k = 0; k < parts.length; k++) {
+      var q = parts[k], on = Math.hypot(cx - q.x, cz - q.z) - q.r < SXD_GROUP_DRAW
+      if (q.obj.visible !== on) q.obj.visible = on
+    }
+  })
+  return parts
+}
+
 async function SXD_level(i) {
+  SXD_GROUPS = []
   var root = new lt.Group()
   root.name = 'level'
   i.scene.add(root)
@@ -763,6 +795,14 @@ async function SXD_level(i) {
       console.error('[desert] outposts layout failed', e)
     }
   }
+  // --- Crossroads-style houses, in groups and alone (houses feature) ---
+  if (typeof SXH_layout === 'function') {
+    try {
+      SXH_layout({ t: t, place: place, M: M, ts: ts, rock: rock, rockCluster: rockCluster, scrub: scrub, wall: wall, sandbagRow: sandbagRow, truck: truck, fuelTank: fuelTank, waterTower: waterTower, mast: mast, pipeline: pipeline, pumpjack: pumpjack, lamps: lamps })
+    } catch (e) {
+      console.error('[desert] houses layout failed', e)
+    }
+  }
 
   var lampMesh = lamps.build()
   if (lampMesh) {
@@ -806,13 +846,11 @@ async function SXD_level(i) {
   } catch (e) {
     console.error('[desert] label atlas failed', e)
   }
-  // outposts: one merged group per site, so the far ones cull (outposts feature)
-  if (typeof SXO_split === 'function') {
-    try {
-      SXO_split(t, root)
-    } catch (e) {
-      console.error('[desert] outposts split failed', e)
-    }
+  // outposts + houses: one merged group per site, so the far ones cull
+  try {
+    SXD_splitGroups(t, root)
+  } catch (e) {
+    console.error('[desert] site groups failed', e)
   }
   var merged = By(t.staticRoot)
   merged.name = 'level-merged'
@@ -1383,7 +1421,32 @@ function SXD_basinSd(x, z) {
 
 var SXD_MESAS = [
   [250, -190, 110, 62], [-330, 150, 150, 52], [60, 430, 120, 80], [-140, -390, 95, 58], [430, 140, 140, 46], [-470, -150, 120, 72], [300, 380, 90, 40], [-420, 380, 140, 66],
+  // the outer ring (700-1400 m): plateaus and a few tall narrow buttes, clear
+  // of the outposts, the houses (houses feature), the highway and each other
+  [1180, 40, 150, 70], [1050, -850, 100, 55], [-300, -1050, 130, 60], [-650, -1180, 90, 48], [-1150, -350, 120, 55], [-1110, 650, 90, 50], [-680, 1250, 95, 58],
+  [250, 1150, 100, 52], [720, 1000, 120, 50], [1250, 420, 80, 62], [560, -760, 70, 45],
+  [-770, 60, 50, 72], [920, -200, 45, 78], [-420, 760, 55, 70],
 ]
+
+// A mountain range round the horizon, past the play radius: rocky peaks that
+// only rise from SXD_PLAY_R - 50 outwards (SXD_terrainBase), so nothing in
+// the playable map changes; from the outer desert they close the view.
+// [x, z, radius, height, seed]
+var SXD_PEAKS = (function () {
+  var out = [], n = 19
+  for (var k = 0; k < n; k++) {
+    if (k === 4 || k === 13) continue // two passes in the range
+    var a = (k / n) * Math.PI * 2 + Math.sin(k * 7.3) * 0.12, d = 1780 + 380 * (0.5 + 0.5 * Math.sin(k * 3.7 + 1.1))
+    out.push([Math.cos(a) * d, Math.sin(a) * d, 420 + 180 * (0.5 + 0.5 * Math.sin(k * 5.1)), 150 + 120 * (0.5 + 0.5 * Math.sin(k * 2.9 + 0.4)), k * 1.37])
+  }
+  return out
+})()
+function SXD_peakH(p, d, x, z) {
+  var t = d / p[2]
+  if (t >= 1) return 0
+  var rid = 1 - Math.abs(2 * SXD_fbm2(x / 210 + p[4], z / 210 - p[4], 4) - 1)
+  return p[3] * Math.pow(1 - t, 1.7) * (1 + 0.5 * t) * (0.7 + 0.55 * rid)
+}
 
 // Mesa tracks: a straight embankment ramp per mesa, from the plain up to the
 // caprock at `grade` (0.32 ≈ 18°: the Sandcat and, slower, the Rhino make it),
@@ -1406,6 +1469,7 @@ function SXD_mesaRamps() {
   if (SXD_RAMPS) return SXD_RAMPS
   var B = SXD_BOUND, bcx = (B.x0 + B.x1) / 2, bcz = (B.z0 + B.z1) / 2, T = SXD_RAMP_TUNE
   var sites = typeof SXO_SITES !== 'undefined' ? SXO_SITES : []
+  var vils = typeof SXH_SITES !== 'undefined' ? SXH_SITES : []
   SXD_RAMPS = SXD_MESAS.map(function (m, k) {
     var toC = Math.atan2(bcz - m[1], bcx - m[0]), best = null
     for (var c = 0; c < T.dirs; c++) {
@@ -1418,6 +1482,8 @@ function SXD_mesaRamps() {
           if (SXD_basinSd(x, z) < 25) bad++
           for (var q = 0; q < SXD_MESAS.length; q++) if (q !== k && Math.hypot(x - SXD_MESAS[q][0], z - SXD_MESAS[q][1]) < SXD_MESAS[q][2] * 1.3 + 10) bad++
           for (var p = 0; p < sites.length; p++) if (Math.hypot(x - sites[p].x, z - sites[p].z) < sites[p].r + 45) bad++
+          for (var v = 0; v < vils.length; v++) if (Math.hypot(x - vils[v].x, z - vils[v].z) < vils[v].r + (vils[v].blend || 30) + 15) bad++
+          if (Math.hypot(x - bcx, z - bcz) > SXD_PLAY_R - 30) bad++
           if (SXD_polyDist(x, z, SXD_ROAD_PTS) < 40) bad++
         }
       var score = Math.cos(a - toC) - bad * 10
@@ -1505,13 +1571,23 @@ function SXD_terrainBase(x, z) {
   // mesas: flat caprock, layered cliff, gullies, rubbly talus (SXD_mesaH)
   SXD_mesaRamps() // their tracks keep the gullies away
   for (var k = 0; k < SXD_MESAS.length; k++) {
-    var m = SXD_MESAS[k], dx = x - m[0], dz = z - m[1]
+    var m = SXD_MESAS[k], dx = x - m[0], dz = z - m[1], reach = m[2] + 230
+    if (dx > reach || dx < -reach || dz > reach || dz < -reach) continue
     var d = Math.hypot(dx, dz)
-    if (d > m[2] + 230) continue
+    if (d > reach) continue
     h = Math.max(h, SXD_mesaH(k, m, d, Math.atan2(dz, dx), x, z))
   }
   // a dirt track up each mesa, so vehicles can drive onto the caprock
   h = SXD_rampLift(x, z, h)
+  // the range round the horizon, rising from the map edge outwards
+  var rc = Math.hypot(x - (B.x0 + B.x1) / 2, z - (B.z0 + B.z1) / 2)
+  if (rc > SXD_PLAY_R - 50) {
+    var up = SXD_smooth(SXD_PLAY_R - 50, SXD_PLAY_R + 150, rc)
+    for (var pk = 0; pk < SXD_PEAKS.length; pk++) {
+      var P = SXD_PEAKS[pk], pd = Math.hypot(x - P[0], z - P[1])
+      if (pd < P[2]) h = Math.max(h, SXD_peakH(P, pd, x, z) * up)
+    }
+  }
   // outposts (outposts feature): carve a flat bowl, floor at y = 0
   if (typeof SXO_SITES !== 'undefined') {
     for (var q = 0; q < SXO_SITES.length; q++) {
@@ -1519,6 +1595,8 @@ function SXD_terrainBase(x, z) {
       if (sd < site.r + 34) h *= SXD_smooth(site.r, site.r + 34, sd)
     }
   }
+  // houses (houses feature): a level pad at the dunes' own mean height
+  if (typeof SXH_pad === 'function') h = SXH_pad(x, z, h)
   return h
 }
 
@@ -2246,7 +2324,7 @@ async function SXD_backdrop(i) {
   var near = SXD_HG ? SXD_buildChunks(mat) : null
   if (near) root.add(near.group)
   var stream = SXD_HG ? SXD_streamer(root, mat, hideU.uSdHide) : null
-  window.__sxdWorld = { ramps: SXD_mesaRamps(), h: SXD_heightAt, tiles: SXD_TILES, stream: stream, hide: hideU.uSdHide.value, playR: SXD_PLAY_R, worldR: SXD_WORLD_R } // tests
+  window.__sxdWorld = { ramps: SXD_mesaRamps(), mesas: SXD_MESAS, peaks: SXD_PEAKS, th: SXD_terrainHeight, h: SXD_heightAt, tiles: SXD_TILES, stream: stream, hide: hideU.uSdHide.value, playR: SXD_PLAY_R, worldR: SXD_WORLD_R } // tests
   // the sun's shadow box was fitted to the basin; out on the dunes it follows
   // the camera (same size, so the PCSS constants stay valid)
   var sun = i.render && i.render.sun
