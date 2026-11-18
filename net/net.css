@@ -81,7 +81,7 @@
 @media (max-width: 420px) { .sxn-teams { grid-template-columns: 1fr; } }
 
 /* lobby: mode (host picks) + the free-for-all list */
-.sxn-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sxn-mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .sxn-mode button { text-align: left; background: rgba(255, 255, 255, .03); border: 1px solid var(--line, rgba(232,228,218,.18)); color: var(--bone-dim, #aaa); padding: 8px 10px; cursor: pointer; }
 .sxn-mode button b { display: block; font: 700 12px/1.2 var(--f-label, sans-serif); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 2px; }
 .sxn-mode button span { font-size: 11px; }
@@ -140,6 +140,8 @@ body.sxn-mp .h-relays { display: none; }
 
 /* lobby: rounds to win (host) */
 .sxn-rounds { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+/* Survival rooms: no rounds, no Robots pick */
+.sxn-rounds[hidden], .sxn-bots[hidden] { display: none; }
 .sxn-rounds > span { font: 600 10px/1 var(--f-label, sans-serif); letter-spacing: .2em; text-transform: uppercase; color: var(--bone-dim, #aaa); margin-right: 4px; }
 .sxn-rounds input { width: 64px; height: 28px; padding: 0 8px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line, rgba(232,228,218,.18)); color: var(--bone, #eee); font: 700 15px/1 var(--f-mono, monospace); }
 .sxn-rounds input:focus { outline: none; border-color: var(--signal, #ffb347); }
@@ -184,3 +186,17 @@ body.sxn-mp .h-relays { display: none; }
 .sxn-spec.on { display: block; }
 .sxn-spec b { color: #7fb6ff; letter-spacing: .1em; }
 .sxn-spec span { color: var(--bone-dim, #aaa); font-weight: 500; letter-spacing: .04em; }
+
+/* out of the fight in a room (dead: spectating a teammate, or the respawn
+   countdown; net.js SXN_downClass): the live player's HUD goes — crosshair,
+   hit marker, damage arcs, prompt, vitals, ammo, compass, warnings, world
+   markers, loadout / kit / armour, heal bar, pickup labels and toasts, scope,
+   backpack, minimap and its waypoint. Kept: kill feed, messages, objective,
+   radio, score bar, banners, the spectate bar and the countdown. */
+body.sxn-down .hud .h-cross, body.sxn-down .hud .h-hit, body.sxn-down .hud .h-arcs,
+body.sxn-down .hud .h-prompt, body.sxn-down .hud .h-health, body.sxn-down .hud .h-ammo,
+body.sxn-down .hud .h-compass, body.sxn-down .hud .h-warn, body.sxn-down .hud .h-marks,
+body.sxn-down .sx-load, body.sxn-down .sx-heal, body.sxn-down .sx-armor, body.sxn-down .sx-medhint,
+body.sxn-down .sx-plabels, body.sxn-down .sx-toasts, body.sxn-down .sx-scope, body.sxn-down .sx-acog,
+body.sxn-down .sx-bag, body.sxn-down .sx-bagp, body.sxn-down .sxm-mini, body.sxn-down .sxm-wp,
+body.sxn-down .sx-vmark, body.sxn-down .sxo-marks { display: none !important; }

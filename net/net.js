@@ -113,6 +113,9 @@ function SXN_teamFull(t) { return SXN_teamSize(t) >= SXN_teamMax() }
 // Free-for-all (SXN.mode 'ffa', the host picks it in the lobby): everyone is
 // everyone's enemy, the Blue/Red columns are ignored
 function SXN_ffa() { return SXN.mode === 'ffa' }
+// Survival (SXN.mode 'surv', the host picks it in the lobby): co-op, everyone
+// on Blue, against the Survival waves of modes/modes.js (the host runs them)
+function SXN_surv() { return SXN.mode === 'surv' }
 function SXN_ally(p) { return !!p && (SXN_ffa() ? p.id === SXN.myId : p.team === SXN.team) }
 function SXN_versus() {
   if (!SXN.active) return false
@@ -121,7 +124,8 @@ function SXN_versus() {
 }
 function SXN_rosterMsg() { return { t: 'roster', players: SXN_roster(), mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds, rm: SXN.roundMins } }
 // share of robots that still come (troopers/troopers.js, the stock waves below)
-function SXN_botScale() { return SXN.active ? (SXN_TUNE.bots[SXN.bots] != null ? SXN_TUNE.bots[SXN.bots] : 1) : 1 }
+// (Survival: the waves are the robots — the Robots pick does not apply)
+function SXN_botScale() { return SXN.active && !SXN_surv() ? (SXN_TUNE.bots[SXN.bots] != null ? SXN_TUNE.bots[SXN.bots] : 1) : 1 }
 function SXN_protected() { return SXN.active && performance.now() < SXN.protectUntil }
 function SXN_protect() { SXN.protectUntil = performance.now() + SXN_TUNE.protect * 1000 }
 // a player's colour/class from where I stand
@@ -130,6 +134,7 @@ function SXN_updateMode() { window.SXN_NOEXT = SXN_versus(); SXN_refreshObjectiv
 // the HUD objective in a room (game/js/10_game.js D() asks for it): the
 // room's goal — there is no relay mission in multiplayer
 function SXN_objectiveText() {
+  if (SXN_surv() && typeof SXQ_objective === 'function') return SXQ_objective()
   var goal = ' · first to ' + SXN.winRounds + ' rounds, by ' + SXN_TUNE.rounds.by
   if (SXN_ffa() && SXN_versus()) return 'Free-for-all — most kills in each ' + SXN_ffaMins() + ' round' + goal
   if (SXN_versus()) return SXN_teamName(SXN.team) + ' team — wipe out the other team (' + SXN_ffaMins() + ' max)' + goal
@@ -412,7 +417,7 @@ function SXN_hostRecv(conn, m) {
     conn.__seen = performance.now()
     SXN.guests[id] = conn
     // a newcomer lands on the smaller team (or the one asked for after a map reload)
-    var team = (m.team === 'blue' || m.team === 'red') && !SXN_teamFull(m.team) ? m.team : SXN_teamSize('red') < SXN_teamSize('blue') ? 'red' : 'blue'
+    var team = SXN_surv() ? 'blue' : (m.team === 'blue' || m.team === 'red') && !SXN_teamFull(m.team) ? m.team : SXN_teamSize('red') < SXN_teamSize('blue') ? 'red' : 'blue'
     var p = SXN_addPlayer({ id: id, name: SXN_clean(m.name), team: team })
     var G = SXN.G
     conn.send({ t: 'welcome', id: id, code: SXN.code, map: SXN_mapName(), seed: String(G.params.seed || 4207), started: SXN.started, players: SXN_roster(), score: SXN.score, mode: SXN.mode, bots: SXN.bots, room: SXN_roomMax(), wr: SXN.winRounds, rm: SXN.roundMins, rt: SXN_roundLeft() })
@@ -495,7 +500,7 @@ function SXN_join(code, name, team, cb) {
         m.players.forEach(function (q) { SXN_addPlayer(q) })
         SXN.team = SXN.players[m.id] ? SXN.players[m.id].team : 'blue'
         SXN.score = m.score || SXN_newScore()
-        SXN.mode = m.mode === 'ffa' ? 'ffa' : 'teams'
+        SXN.mode = m.mode === 'ffa' || m.mode === 'surv' ? m.mode : 'teams'
         if (SXN_TUNE.bots[m.bots] != null) SXN.bots = m.bots
         if (m.room) SXN.roomMax = m.room
         if (m.wr >= 1) SXN.winRounds = m.wr
@@ -657,6 +662,10 @@ function SXN_install(G) {
     SXN_emit({ t: 'shot', o: [+o.x.toFixed(2), +o.y.toFixed(2), +o.z.toFixed(2)], d: [+ev.dir.x.toFixed(3), +ev.dir.y.toFixed(3), +ev.dir.z.toFixed(3)], w: SXN_weapon() })
   })
   G.events.on('player:dead', function () { if (SXN.active) SXN_localDeath() })
+  // Survival room: a downed player is back once the wave is cleared, next to a teammate
+  G.events.on('survival:cleared', function () {
+    if (SXN.active && SXN_surv() && SXN_inGame() && G.player && !G.player.alive) SXN_respawn()
+  })
   // spectate: the camera is placed right before each frame is drawn
   if (G.render && typeof G.render.frame === 'function') {
     var frame0 = G.render.frame
@@ -688,7 +697,9 @@ function SXN_afterStart() {
   var sp = SXN_spawnPoint(true)
   try { G.player.reset({ pos: sp.pos, yaw: sp.yaw }) } catch (e) { }
   SXN_protect()
-  SXN_banner(SXN_ffa() && SXN_versus()
+  SXN_banner(SXN_surv()
+    ? 'Survival — hold out together. Every wave is bigger; anyone down is back when the wave is cleared'
+    : SXN_ffa() && SXN_versus()
     ? 'Free-for-all — ' + SXN_ffaMins() + ' rounds, the most kills takes each one. First to ' + SXN.winRounds + ' rounds, by ' + SXN_TUNE.rounds.by
     : SXN_versus()
     ? SXN_teamName(SXN.team) + ' team — one life per round, wipe out the other team. First to ' + SXN.winRounds + ' rounds, by ' + SXN_TUNE.rounds.by
@@ -719,7 +730,7 @@ function SXN_handle(m) {
       break
     case 'team':
       // a guest asks to switch sides (host only; lobby only)
-      if (SXN.role === 'host' && p && (m.team === 'blue' || m.team === 'red') && p.team !== m.team && !SXN_teamFull(m.team)) {
+      if (SXN.role === 'host' && p && !SXN_surv() && (m.team === 'blue' || m.team === 'red') && p.team !== m.team && !SXN_teamFull(m.team)) {
         SXN_addPlayer({ id: p.id, name: p.name, team: m.team })
         SXN_broadcast(SXN_rosterMsg())
         SXN_updateMode()
@@ -740,6 +751,7 @@ function SXN_handle(m) {
     case 'score': if (SXN.role === 'guest') SXN_applyScore(m); break
     case 'rk': SXN_robotKill(m); break
     case 'round': if (SXN.role === 'guest') SXN_roundMsg(m); break
+    case 'sv': if (SXN.role === 'guest' && !m.from) SXN_survMsg(m); break
     case 'bye': SXN_removePlayer(m.id); SXN_refreshUi(); break
     case 'closed': SXN_hostLeft(); break
     case 'start':
@@ -1081,6 +1093,7 @@ function SXN_markDeath(id, by) {
   if (p && k && by === SXN.myId && id !== SXN.myId && typeof SXK_popup === 'function') {
     if (typeof SXK !== 'undefined') SXK.kills = (SXK.kills | 0) + 1
     SXK_popup(p.name, { pvp: true })
+    try { SXN.G.events.emit('net:myKill', { pvp: true, name: p.name }) } catch (e) { } // stats/stats.js
   }
   if (SXN.role === 'host') SXN_hostDeath(p, k)
   SXN_refreshUi()
@@ -1110,7 +1123,8 @@ function SXN_hostDeath(p, k) {
 // respawns at base with the starting kit and the map's pickups put back.
 function SXN_elim() { return SXN.active && SXN_versus() }
 // one life per round: team rounds only (free-for-all respawns, rounds are timed)
-function SXN_oneLife() { return SXN_elim() && !SXN_ffa() }
+// (Survival too: down until the wave is cleared, spectating a teammate meanwhile)
+function SXN_oneLife() { return (SXN_elim() && !SXN_ffa()) || (SXN.active && SXN_surv()) }
 // the round's length (s) and its name ("3-minute", "90-second")
 function SXN_roundSecs() { return Math.max(10, Math.round((+SXN.roundMins || SXN_TUNE.rounds.mins.def) * 60)) }
 function SXN_ffaMins() { var s = SXN_roundSecs(); return s % 60 ? s + '-second' : (s / 60) + '-minute' }
@@ -1149,7 +1163,7 @@ function SXN_roundSides() {
   return sides
 }
 function SXN_roundCheck() {
-  if (SXN.role !== 'host' || !SXN.roundLive || !SXN_oneLife() || !SXN_inGame() || !SXN.score) return
+  if (SXN.role !== 'host' || !SXN.roundLive || !SXN_oneLife() || SXN_surv() || !SXN_inGame() || !SXN.score) return
   if (performance.now() - SXN.roundT0 < SXN_TUNE.rounds.grace * 1000) return
   var sides = SXN_roundSides(), keys = Object.keys(sides)
   if (keys.length < 2) return // nobody to fight yet
@@ -1261,9 +1275,30 @@ function SXN_specStep(d) {
   S.snap = true
 }
 var SXN_specV = null
+// Out of the fight in a room — dead, spectating a teammate (team rounds) or
+// waiting out the respawn countdown: body.sxn-down hides the HUD that only
+// means something to a live player (crosshair, vitals, ammo, kit, prompts,
+// minimap, world markers: net.css); the kill feed, messages, objective, radio,
+// score bar, banners and the spectate bar / countdown stay. body.sxn-spectating
+// while the camera follows a teammate. Off again on respawn, at the match
+// results, and once out of the room.
+var SXN_downCls = { down: null, spec: null }
+function SXN_downClass(spec) {
+  var G = SXN.G, res = !!(SXN.ui && SXN.ui.res && SXN.ui.res.classList.contains('on'))
+  var down = !!(SXN.active && SXN_inGame() && G.player && !G.player.alive && !res)
+  spec = !!spec && down
+  if (SXN_downCls.down !== down) {
+    SXN_downCls.down = down
+    document.body.classList.toggle('sxn-down', down)
+    // the gun in your hands goes too (SXN_respawn puts it back)
+    if (down) try { G.weapon.setVisible && G.weapon.setVisible(false) } catch (e) { }
+  }
+  if (SXN_downCls.spec !== spec) { SXN_downCls.spec = spec; document.body.classList.toggle('sxn-spectating', spec) }
+}
 // every frame, before the scene is drawn (G.render.frame is wrapped in SXN_install)
 function SXN_specFrame() {
   var G = SXN.G, ui = SXN.ui, on = SXN_specOn()
+  SXN_downClass(on)
   if (!on) {
     if (SXN.spec) { SXN.spec = null; if (ui && ui.spec) ui.spec.classList.remove('on') }
     return
@@ -1298,6 +1333,10 @@ function SXN_specFrame() {
     G.camera.position.copy(S.pos)
     G.camera.lookAt(S.look)
     G.camera.updateMatrixWorld()
+    // the view is the teammate's now: no red low-health / damage tint of my own
+    // death on it (the player's update sets them each frame; this runs after it)
+    var post = G.render && G.render.post
+    if (post) { post.lowHealth = 0; post.damage = 0 }
   }
   if (ui && ui.spec) {
     var name = p ? p.name : null, txt = (name ? 'Spectating <b>' + String(name).replace(/[<>&"']/g, '') + '</b>' + (list.length > 1 ? ' (' + (list.indexOf(S.id) + 1) + '/' + list.length + ') · click / Space: next · right click: previous' : '') : 'No teammate to watch') + '<br><span>' + SXN_outText() + '</span>'
@@ -1312,9 +1351,10 @@ function SXN_specFrame() {
 // downed (free-for-all: rounds won too), the MVP starred. Buttons: Main menu
 // (leave the room, back to the title) for all; Next match for the host. The
 // next match starts by itself when the countdown runs out.
-function SXN_results(m) {
-  var ui = SXN.ui, G = SXN.G
-  if (!ui) return
+// the results card (versus match results, Survival run over)
+function SXN_resCard() {
+  var ui = SXN.ui
+  if (!ui) return null
   if (!ui.res) {
     var el = document.createElement('div')
     el.className = 'sxn-res'
@@ -1324,11 +1364,32 @@ function SXN_results(m) {
     ;(document.getElementById('app') || document.body).appendChild(el)
     el.addEventListener('keydown', function (e) { e.stopPropagation() })
     el.querySelector('.sxn-res-menu').addEventListener('click', function () { SXN_toMenu() })
-    el.querySelector('.sxn-res-next').addEventListener('click', function () { if (SXN.role === 'host' && !SXN.roundLive && SXN.matchOver) SXN.roundNextT = 0.01 })
+    el.querySelector('.sxn-res-next').addEventListener('click', function () {
+      if (SXN.role !== 'host') return
+      if (SXN_surv()) { if (SXN.survNextT > 0) SXN.survNextT = 0.01 } // play again now
+      else if (!SXN.roundLive && SXN.matchOver) SXN.roundNextT = 0.01
+    })
     ui.res = el
   }
+  return ui.res
+}
+// show the card: free the mouse without pausing, nobody hurt while reading it
+function SXN_resShow(next) {
+  var ui = SXN.ui, G = SXN.G
+  ui.resEndT = performance.now() + next * 1000
+  SXN_resultsTick()
+  ui.res.classList.add('on')
+  try { if (typeof SXM !== 'undefined' && SXM) SXM.holdPause = true } catch (e) { }
+  try { document.pointerLockElement && document.exitPointerLock() } catch (e) { }
+  try { G.player.enabled = false } catch (e) { }
+  SXN.protectUntil = performance.now() + (next + 1) * 1000
+}
+function SXN_results(m) {
+  var ui = SXN.ui, G = SXN.G
+  if (!SXN_resCard()) return
   var ffa = SXN_ffa(), win = m.win, mine = win && (win === SXN.myId || (!ffa && win === SXN.team))
   var q = function (s) { return ui.res.querySelector(s) }
+  q('.sxn-res-next').textContent = 'Next match'
   q('.sxn-res-k').textContent = mine ? 'VICTORY' : 'DEFEAT'
   q('.sxn-res-k').className = 'sxn-res-k ' + (mine ? 'win' : 'lose')
   q('.sxn-res-h').textContent = ffa ? (win === SXN.myId ? 'YOU WIN THE MATCH' : SXN_sideName(win) + ' WINS THE MATCH') : SXN_teamName(win).toUpperCase() + ' TEAM WINS'
@@ -1354,21 +1415,15 @@ function SXN_results(m) {
   })
   q('.sxn-res-t').innerHTML = html + '</tbody></table>'
   q('.sxn-res-next').hidden = SXN.role !== 'host'
-  ui.resEndT = performance.now() + (m.next || SXN_TUNE.rounds.matchPause) * 1000
-  SXN_resultsTick()
-  ui.res.classList.add('on')
-  // free the mouse for the buttons without the game pausing (as the bag does)
-  try { if (typeof SXM !== 'undefined' && SXM) SXM.holdPause = true } catch (e) { }
-  try { document.pointerLockElement && document.exitPointerLock() } catch (e) { }
-  try { G.player.enabled = false } catch (e) { }
+  // free the mouse for the buttons without the game pausing (as the bag does);
   // nobody gets hurt while reading it (robots keep going)
-  SXN.protectUntil = performance.now() + ((m.next || SXN_TUNE.rounds.matchPause) + 1) * 1000
+  SXN_resShow(m.next || SXN_TUNE.rounds.matchPause)
 }
 function SXN_resultsTick() {
   var ui = SXN.ui
   if (!ui || !ui.res || !ui.res.classList.contains('on')) return
   var s = Math.max(0, Math.ceil((ui.resEndT - performance.now()) / 1000))
-  var t = 'Next match in ' + s + ' s' + (SXN.role === 'host' ? ' — or start it now' : ' — the host can start it sooner')
+  var t = (SXN_surv() ? 'Next run in ' : 'Next match in ') + s + ' s' + (SXN.role === 'host' ? ' — or start it now' : ' — the host can start it sooner')
   if (ui.res._t !== t) { ui.res._t = t; ui.res.querySelector('.sxn-res-n').textContent = t }
 }
 function SXN_resultsHide() {
@@ -1392,15 +1447,129 @@ function SXN_toMenu() {
 // the dead player's screen while the round goes on
 function SXN_outText() {
   var sides = SXN_roundSides(), parts = []
+  if (SXN_surv()) {
+    var up = sides.blue ? sides.blue.alive : 0
+    return 'You are down — back when this wave is cleared · ' + up + (up === 1 ? ' teammate' : ' teammates') + ' standing'
+  }
   if (SXN_ffa()) { var n = 0; for (var k in sides) n += sides[k].alive; parts.push(n + ' left standing') }
   else ['blue', 'red'].forEach(function (t) { parts.push(SXN_teamName(t).toUpperCase() + ' ' + (sides[t] ? sides[t].alive : 0) + ' alive') })
   return 'You are out — back next round · ' + parts.join(' · ')
 }
-// lobby (host): Blue vs Red or free-for-all
+// ----------------------------------------------------- Survival (co-op)
+// The host runs the waves (modes/modes.js, SXQ_survOn is true for it in a
+// Survival room) and sends the run's state as 'sv' {ph: st | over | go}:
+//  st   2×/s and on every change: w wave, s 1 fight / 0 breather, tt s left of
+//       the breather, l machines left, c waves cleared → each guest's mirror
+//       run (SXQ_mirror: HUD line, wave banners, the resupply after a wave)
+//  over every player in the run is down at once: waves, each player's
+//       [id, robots, deaths]; everyone gets the results card, the host
+//       restarts after surv.next s (or Play again)
+//  go   a new run: hostiles cleared on the host, everyone back at the base
+// A downed player spectates a teammate and is back when the wave is cleared
+// (survival:cleared, SXN_install), next to a teammate still standing.
+SXN_TUNE.surv = { next: 20, sendEvery: 0.5, grace: 3 }
+function SXN_survRun() { return typeof SXQ !== 'undefined' && SXQ.run ? SXQ.run : null }
+// host, each tick: the state out, and the end of the run
+function SXN_survHost(dt) {
+  var R = SXN_survRun()
+  if (!R || R.mirror) return
+  if (!R.over) {
+    var sig = R.wave + ':' + R.state + ':' + R.cleared
+    SXN_acc.sv = (SXN_acc.sv || 0) + dt
+    if (sig !== SXN.svSig || SXN_acc.sv >= SXN_TUNE.surv.sendEvery) {
+      SXN.svSig = sig; SXN_acc.sv = 0
+      SXN_broadcast({ t: 'sv', ph: 'st', w: R.wave, s: R.state === 'fight' ? 1 : 0, tt: Math.round(R.t * 10) / 10, l: typeof SXQ_left === 'function' ? SXQ_left(R) : 0, c: R.cleared })
+    }
+    // everyone in the run down at once: over
+    if (R.time >= SXN_TUNE.surv.grace) {
+      var b = SXN_roundSides().blue
+      if (b && b.n > 0 && b.alive === 0) SXN_survOver()
+    }
+  } else if (SXN.survNextT > 0) {
+    SXN.survNextT -= dt
+    if (SXN.survNextT <= 0) SXN_survGo()
+  }
+}
+function SXN_survOver() {
+  var R = SXN_survRun()
+  if (!R || R.over) return
+  var k = Object.keys(SXN.players).map(function (id) { var p = SXN.players[id]; return [id, p.kills | 0, p.deaths | 0] })
+  var m = { t: 'sv', ph: 'over', w: R.wave, c: R.cleared, k: k, next: SXN_TUNE.surv.next }
+  SXN.survNextT = m.next
+  SXN_broadcast(m)
+  SXN_survMsg(m)
+}
+// host: a new run for the room
+function SXN_survGo() {
+  if (SXN.role !== 'host') return
+  var G = SXN.G
+  SXN.survNextT = 0
+  try { G.enemies.clear && G.enemies.clear() } catch (e) { }
+  try { var U = G.units; if (U) U.list.slice().forEach(function (u) { if (u.faction === 'enemy') U.remove(u) }) } catch (e) { }
+  for (var id in SXN.players) { var q = SXN.players[id]; q.kills = 0; q.pk = 0; q.deaths = 0; q.tk = 0 }
+  SXN.score = SXN_newScore()
+  SXN_pushScore()
+  var m = { t: 'sv', ph: 'go' }
+  SXN_broadcast(m)
+  SXN_survMsg(m)
+}
+// everyone: what the host sent (the host calls it for its own 'over' / 'go')
+function SXN_survMsg(m) {
+  if (!m || !SXN_surv()) return
+  if (m.ph === 'st') { if (typeof SXQ_mirror === 'function') SXQ_mirror(m); return }
+  if (!SXN_inGame()) return // still in the lobby: nothing to show
+  if (m.ph === 'over') {
+    var mine = (m.k || []).filter(function (r) { return r[0] === SXN.myId })[0]
+    var R = typeof SXQ_coopOver === 'function' ? SXQ_coopOver({ w: m.w, c: m.c, kills: mine ? mine[1] : null }) : null
+    SXN_survResults(m, R || SXN_survRun())
+    return
+  }
+  if (m.ph === 'go') {
+    var G = SXN.G
+    for (var id in SXN.players) { var p = SXN.players[id]; p.dead = false; p.inRound = false }
+    SXN.respawnT = -1
+    if (typeof SXQ !== 'undefined' && typeof SXQ_newRun === 'function') SXQ.run = SXQ_newRun()
+    SXN.svSig = ''
+    SXN_resultsHide()
+    SXN_respawn(true) // the whole squad at the base
+    try { G.weapon.arsenal.resetPickups && G.weapon.arsenal.resetPickups() } catch (e) { }
+    try { G.hud.setRelays && G.hud.setRelays(0, 0) } catch (e) { }
+    SXN_banner('Survival — a new run. Hold out together', 3)
+    SXN_refreshObjective()
+    SXN_refreshUi()
+  }
+}
+// the run's results: waves, each player's robots and deaths, my best co-op run here
+function SXN_survResults(m, R) {
+  var ui = SXN.ui
+  if (!SXN_resCard()) return
+  var q = function (s) { return ui.res.querySelector(s) }
+  q('.sxn-res-k').textContent = 'SQUAD DOWN'
+  q('.sxn-res-k').className = 'sxn-res-k lose'
+  q('.sxn-res-h').textContent = 'WAVE ' + (m.w | 0) + ' · ' + (m.c | 0) + (m.c === 1 ? ' WAVE' : ' WAVES') + ' CLEARED'
+  q('.sxn-res-h').className = 'sxn-res-h'
+  var b = R && R.best
+  q('.sxn-res-s').textContent = R && R.record ? 'New co-op best on this map!' : b ? 'Your co-op best here: ' + b.cleared + (b.cleared === 1 ? ' wave' : ' waves') + ' cleared · ' + b.kills + ' kills' : 'Survival · co-op'
+  var rows = (m.k || []).map(function (r) { var p = SXN.players[r[0]]; return { id: r[0], name: p ? p.name : '?', bots: r[1] | 0, d: r[2] | 0 } })
+  rows.sort(function (a, c) { return c.bots - a.bots || a.d - c.d })
+  var mvp = rows[0]
+  var esc = function (s) { return String(s).replace(/[<>&"']/g, '') }
+  var html = '<table><thead><tr><th class="n">Player</th><th>Robots</th><th>Deaths</th></tr></thead><tbody>'
+  rows.forEach(function (r) {
+    html += '<tr class="' + (r.id === SXN.myId ? 'me ' : '') + 'blue"><td class="n"><i class="sxn-dot blue"></i>' + esc(r.name) + (r.id === SXN.myId ? ' <span>(you)</span>' : '') + (mvp && r.id === mvp.id && mvp.bots > 0 ? ' <b class="mvp">★ MVP</b>' : '') + '</td><td>' + r.bots + '</td><td>' + r.d + '</td></tr>'
+  })
+  q('.sxn-res-t').innerHTML = html + '</tbody></table>'
+  q('.sxn-res-next').textContent = 'Play again'
+  q('.sxn-res-next').hidden = SXN.role !== 'host'
+  SXN_resShow(m.next || SXN_TUNE.surv.next)
+}
+// lobby (host): Blue vs Red, free-for-all or Survival
 function SXN_setMode(mode) {
-  mode = mode === 'ffa' ? 'ffa' : 'teams'
+  mode = mode === 'ffa' || mode === 'surv' ? mode : 'teams'
   if (SXN.mode === mode) return
   SXN.mode = mode
+  // Survival: one squad — the host puts everyone on Blue (the roster follows)
+  if (mode === 'surv' && SXN.role === 'host') for (var sid in SXN.players) { var sp = SXN.players[sid]; if (sp.team !== 'blue') SXN_addPlayer({ id: sid, name: sp.name, team: 'blue' }) }
   for (var id in SXN.players) SXN_dropAvatar(SXN.players[id]) // colours change
   SXN_updateMode()
   SXN_refreshUi()
@@ -1454,7 +1623,7 @@ function SXN_pickMode(mode) {
   if (!SXN.active || SXN.role !== 'host' || SXN_inGame()) return
   SXN_setMode(mode)
   SXN_broadcast(SXN_rosterMsg())
-  SXN_status(SXN_ffa() ? 'Free-for-all: everyone fights everyone' : 'Blue vs Red teams')
+  SXN_status(SXN_surv() ? 'Survival: everyone together against bigger and bigger waves' : SXN_ffa() ? 'Free-for-all: everyone fights everyone' : 'Blue vs Red teams')
 }
 function SXN_pushScore() {
   if (SXN.role !== 'host') return
@@ -1495,6 +1664,7 @@ function SXN_robotKill(m) {
   if (m.by === SXN.myId && typeof SXK_popup === 'function') {
     if (typeof SXK !== 'undefined') SXK.kills = (SXK.kills | 0) + 1
     SXK_popup(m.n)
+    try { SXN.G.events.emit('net:myKill', { pvp: false, name: m.n }) } catch (e) { } // stats/stats.js
   }
 }
 // team bases: Blue at the mission start; Red at the friendly camp farthest
@@ -1554,7 +1724,20 @@ function SXN_ffaBase(first) {
   })
   return best
 }
+// Survival: back next to a teammate still standing (none: the base)
+function SXN_survNear() {
+  var G = SXN.G, V3 = lt.Vector3
+  var spots = SXN_remoteSpots().filter(function (s) { return !s.v })
+  if (!spots.length) return null
+  var s = spots[Math.floor(Math.random() * spots.length)]
+  var a = Math.random() * 6.28, r = 2 + Math.random() * 1.5
+  var pos = new V3(s.x + Math.cos(a) * r, s.y, s.z + Math.sin(a) * r)
+  if (G.units && G.units.spotOutside) pos = G.units.spotOutside(pos.x, pos.z, 0.6, s.y || 0)
+  pos.y = G.physics.groundHeight(pos.x, pos.z, pos.y + 2)
+  return { pos: pos, yaw: s.yaw || 0 }
+}
 function SXN_spawnPoint(first) {
+  if (SXN_surv() && !first) { var near = SXN_survNear(); if (near) return near }
   var G = SXN.G, V3 = lt.Vector3, b = SXN_ffa() ? SXN_ffaBase(first) : SXN_base(SXN.team)
   // a base may say how far from its spot a player lands (waterworks: inside the spawn pocket)
   var a = Math.random() * 6.28, r = Math.random() * (b.r != null ? b.r : 3)
@@ -1563,8 +1746,8 @@ function SXN_spawnPoint(first) {
   pos.y = G.physics.groundHeight(pos.x, pos.z, pos.y + 2)
   return { pos: pos, yaw: b.yaw }
 }
-function SXN_respawn() {
-  var G = SXN.G, sp = SXN_spawnPoint()
+function SXN_respawn(first) {
+  var G = SXN.G, sp = SXN_spawnPoint(first)
   try { G.player.reset({ pos: sp.pos, yaw: sp.yaw }) } catch (e) { console.error('[net] respawn', e) }
   SXN_protect()
   // everything back to the starting kit: guns, ammo, attachments, armour,
@@ -1754,6 +1937,7 @@ function SXN_tick(dt) {
     }
     SXN_resultsTick()
     if (SXN.role === 'host') {
+      if (SXN_surv()) SXN_survHost(dt)
       SXN_acc.rc = (SXN_acc.rc || 0) + dt
       if (SXN_acc.rc >= 0.25) { SXN_acc.rc = 0; SXN_roundCheck() }
       if (!SXN.roundLive && SXN.roundNextT > 0) { SXN.roundNextT -= dt; if (SXN.roundNextT <= 0) SXN_roundGo() }
@@ -1791,7 +1975,7 @@ function SXN_buildUi() {
     '<section class="sxn-room" hidden>' +
     '<div class="sxn-coderow"><span>Room</span><b class="sxn-codev"></b><button class="btn sxn-copy" type="button">Copy code</button><span class="sxn-count"></span></div>' +
     '<div class="sxn-mapsel"><span>Map</span><select class="sxn-mapv" aria-label="Map"></select><i class="sxn-mapn"></i></div>' +
-    '<div class="sxn-mode" role="radiogroup" aria-label="Mode"><button type="button" data-mode="teams" role="radio"><b>Blue vs Red</b><span>Two teams</span></button><button type="button" data-mode="ffa" role="radio"><b>Free-for-all</b><span>Everyone for themselves</span></button></div>' +
+    '<div class="sxn-mode" role="radiogroup" aria-label="Mode"><button type="button" data-mode="teams" role="radio"><b>Blue vs Red</b><span>Two teams</span></button><button type="button" data-mode="ffa" role="radio"><b>Free-for-all</b><span>Everyone for themselves</span></button><button type="button" data-mode="surv" role="radio"><b>Survival</b><span>Co-op waves</span></button></div>' +
     '<div class="sxn-size"><span>Players</span><button type="button" class="sxn-dec" aria-label="Fewer players">−</button><b class="sxn-sizev">8</b><button type="button" class="sxn-inc" aria-label="More players">+</button><i class="sxn-sizen"></i></div>' +
     '<div class="sxn-bots" role="radiogroup" aria-label="Robots"><span>Robots</span><button type="button" data-bots="many" role="radio">Many</button><button type="button" data-bots="few" role="radio">Few</button><button type="button" data-bots="off" role="radio">Off</button></div>' +
     '<div class="sxn-rounds"><span>Rounds to win</span><input class="sxn-roundsv" type="number" inputmode="numeric" min="1" max="15" step="1" aria-label="Rounds to win"><i class="sxn-roundsn"></i></div>' +
@@ -1899,7 +2083,7 @@ function SXN_buildUi() {
 }
 // lobby: switch sides (the host decides for guests; not while in the mission)
 function SXN_pickTeam(t) {
-  if (!SXN.active || (t !== 'blue' && t !== 'red') || SXN.team === t || SXN_inGame()) return
+  if (!SXN.active || (t !== 'blue' && t !== 'red') || SXN.team === t || SXN_inGame() || SXN_surv()) return
   if (SXN_teamFull(t)) { SXN_status(SXN_teamName(t) + ' is full (' + SXN_teamMax() + '/' + SXN_teamMax() + ')'); return }
   if (SXN.role === 'host') {
     SXN_addPlayer({ id: SXN.myId, name: SXN.name, team: t })
@@ -1951,7 +2135,7 @@ function SXN_refreshUi() {
   ui.dec.disabled = !hostLobby || rm <= Math.max(2, nP)
   ui.inc.disabled = !hostLobby || rm >= SXN_mapMax()
   ui.dec.hidden = ui.inc.hidden = SXN.role !== 'host'
-  var inGame = SXN_inGame(), ffa = SXN_ffa()
+  var inGame = SXN_inGame(), ffa = SXN_ffa(), surv = SXN_surv()
   // map: the host picks it in the lobby (everyone reloads into it, same room)
   var cur = SXN_mapName()
   if (ui.mapSel.value !== cur) ui.mapSel.value = cur
@@ -1978,10 +2162,16 @@ function SXN_refreshUi() {
   if (document.activeElement !== ui.mins) ui.mins.value = SXN.roundMins
   ui.mins.disabled = SXN.role !== 'host' || inGame
   ui.minsN.textContent = ffa ? 'the round lasts this long' : 'time up: more players standing wins (equal = draw)'
-  ui.teams.hidden = ffa
-  ui.ffa.hidden = !ffa
-  if (ffa) {
+  // Survival: one squad list; no rounds, no Robots pick (the waves are the robots)
+  ui.rounds.parentNode.hidden = surv
+  ui.mins.parentNode.hidden = surv
+  ui.botBtns[0].parentNode.hidden = surv
+  ui.teams.hidden = ffa || surv
+  ui.ffa.hidden = !(ffa || surv)
+  if (ffa || surv) {
     var all = Object.keys(SXN.players)
+    var h4 = ui.ffa.querySelector('h4')
+    if (h4.firstChild && h4.firstChild.nodeType === 3) h4.firstChild.nodeValue = surv ? 'Survival squad ' : 'Free-for-all '
     ui.ffa.querySelector('h4 span').textContent = all.length + ' / ' + SXN_roomMax()
     ui.ffa.querySelector('ol').innerHTML = all.map(li).join('')
   }
@@ -2006,12 +2196,14 @@ function SXN_refreshUi() {
     ui.go.classList.remove('sxn-wait')
   }
   var vs = SXN_versus()
-  ui.note.textContent = (ffa
+  ui.note.textContent = (surv
+    ? 'Survival: everyone on one squad against waves of robots — each wave bigger than the last, more players = bigger waves. A downed player watches a teammate and is back when the wave is cleared; when the whole squad is down at once, the run is over.'
+    : ffa
     ? 'Free-for-all: every player is everyone else\'s enemy, and the robots fight everybody. Rounds of ' + SXN_ffaMins().replace('-', ' ') + 's with respawns: the most player kills in the round takes it (a tie is a draw). First to ' + SXN.winRounds + ' rounds with a ' + SXN_TUNE.rounds.by + '-round lead wins the match.'
     : (inGame ? 'Leave the mission (pause → quit) to switch teams. ' : 'Pick a team, then get ready. ') +
       (vs ? 'Blue vs Red: the robots fight both teams, and the teams fight each other. One life per round: wipe out the other team to take it, or have more players standing when the ' + SXN_ffaMins() + ' clock runs out. First to ' + SXN.winRounds + ' rounds with a ' + SXN_TUNE.rounds.by + '-round lead wins the match (' + Math.max(SXN.winRounds, 1) + ':' + Math.max(0, SXN.winRounds - 1) + ' plays on).'
         : 'Everyone on one team = co-op: fight the machines together.')) +
-    (SXN.role === 'host' && !inGame ? ' Only the host picks the map, the mode and the robots.' : '') +
+    (SXN.role === 'host' && !inGame ? (surv ? ' Only the host picks the map and the mode.' : ' Only the host picks the map, the mode and the robots.') : '') +
     (SXN.role === 'host'
       ? (SXN.started ? ' The match is on — friends who press Ready join it.' : wait.length ? ' Start unlocks when everyone is ready (' + wait.join(', ') + ' not yet).' : ' Everyone is ready — press Start.')
       : SXN.started ? ' The host started the match — press Ready to join.' : mine ? ' You are ready — the match begins when the host presses Start.' : ' Press Ready; the host starts the match.')
@@ -2211,7 +2403,7 @@ function SXN_profile(G) {
       SXN_status('Reopening room ' + q.get('host') + '…')
       SXN_host(ui2.name.value, function (err, code) {
         if (!err) {
-          if (q.get('mode') === 'ffa' || q.get('mode') === 'teams') SXN_setMode(q.get('mode'))
+          if (q.get('mode') === 'ffa' || q.get('mode') === 'teams' || q.get('mode') === 'surv') SXN_setMode(q.get('mode'))
           if (SXN_TUNE.bots[q.get('bots')] != null) SXN.bots = q.get('bots')
           var rm = +q.get('room'); if (rm >= 2) SXN.roomMax = Math.min(rm, SXN_mapMax())
           var tm = q.get('team'); if (tm === 'red' || tm === 'blue') SXN_addPlayer({ id: 'h', name: SXN.name, team: tm })

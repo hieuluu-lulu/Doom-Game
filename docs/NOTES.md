@@ -2,22 +2,29 @@
 
 Ghi chú chi tiết từng phần (map, súng, robot, chơi mạng, công cụ xử lý model). Phần giới thiệu ngắn: [README](../README.md).
 
-Mã nguồn đầy đủ của game **DoomZone**: game gốc (đã mở ra dạng dễ đọc) cùng mọi phần mod. Build ra **một file HTML duy nhất** (`dist/index.html`, chỉ nằm trong thư mục này; đặt tên index.html để host tĩnh như Vercel mở ngay ở địa chỉ gốc; thêm `--copy` nếu muốn chép ra `../doomzone.html`), mở bằng trình duyệt là chơi, chạy offline được (chỉ chơi mạng mới cần internet).
+Mã nguồn đầy đủ của game **DoomZone**: game gốc (đã mở ra dạng dễ đọc) cùng mọi phần mod. Kết quả build chỉ nằm trong `dist/` của thư mục này, đặt tên `index.html` để host tĩnh (GitHub Pages, Vercel) mở ngay ở địa chỉ gốc. Có hai kiểu build:
+
+- **Mặc định (tách file):** `dist/index.html` (trang + code) và `dist/assets/` (model, texture). Phải chạy qua web server. Mỗi map chỉ tải model mình dùng, và trình duyệt giữ lại model giữa các lần cập nhật. Xem [Tải model theo map](#tải-model-theo-map-distassets).
+- **`--single`:** mọi thứ nhúng vào một file `dist/index.html`, mở thẳng bằng trình duyệt, chơi offline được (chỉ chơi mạng mới cần internet). Thêm `--copy` để chép file đó ra `../doomzone.html` (`--copy` tự bật `--single`).
 
 ```bash
 cd tools && npm install && cd ..       # một lần: esbuild (nén code) + công cụ xử lý model
-python3 -I build.py                     # bản phát hành: code được nén → dist/index.html
+python3 -I build.py                     # bản phát hành: code được nén → dist/index.html + dist/assets/
+python3 -I build.py --single            # bản một file, chạy offline
 python3 -I build.py --debug             # code để nguyên, dễ dò lỗi trong DevTools
-python3 -I build.py --features arsenal --out /tmp/t.html   # build thử riêng một phần
+python3 -I build.py --features arsenal --out /tmp/t/index.html   # build thử riêng một phần (assets/ nằm cạnh file)
+cd dist && python3 -m http.server 8000  # chạy thử bản tách file: http://localhost:8000/
 ```
 
 ## Cấu trúc
 
 | Thư mục / file | Nội dung |
 |---|---|
-| `game/shell.html` | Khung trang; `/*@@CSS@@*/` và `//@@JS@@` là chỗ build chèn CSS và code. |
+| `game/shell.html` | Khung trang; `/*@@CSS@@*/` và `//@@JS@@` là chỗ build chèn CSS và code, `/*@@PRELOAD@@*/` (trong `<head>`) là chỗ chèn `game/preload.js`. |
+| `game/preload.js` | Script nhỏ chạy đầu tiên: bắt đầu tải model của map đang chọn, hiện MB trên thanh loading, đăng ký service worker (bản tách file). |
+| `game/sw.js` | Mẫu service worker; build ghi ra `dist/sw.js` kèm phiên bản và danh sách file (chơi offline, cài như app). |
 | `game/style.css` | CSS của game gốc. |
-| `game/favicon/` | Biểu tượng tab và màn hình chính (`doomzone-32/64/180.png`: chữ DOOM cam trên ZONE trắng, font logo Big Shoulders Display, nền tối). Build nhúng thẳng vào `<head>` chỗ `<!--@@ICON@@-->` trong `game/shell.html`. Vẽ lại bằng `node tools/favicon.cjs game/favicon`. |
+| `game/favicon/` | Biểu tượng tab và màn hình chính (`doomzone-32/64/180.png`: chữ DOOM cam trên ZONE trắng, font logo Big Shoulders Display, nền tối). Build nhúng thẳng vào `<head>` chỗ `<!--@@ICON@@-->` trong `game/shell.html`. `doomzone-192/512.png` và `doomzone-512-maskable.png` (nền phủ kín, chữ nằm trong vùng an toàn 80 % cho icon Android) được chép ra `dist/icons/` cho manifest. Vẽ lại bằng `node tools/favicon.cjs game/favicon`. |
 | `game/js/00_three.js` | Engine three.js r180 (như game gốc đóng gói). |
 | `game/js/10_game.js` | Code game gốc: level, người chơi, súng, robot, nhiệm vụ, HUD, menu, âm thanh. Các bản vá cũ và tên "DoomZone" đã được sửa thẳng vào đây. |
 | `game/js/90_boot.js` | Hàm khởi động `QC()`. |
@@ -31,7 +38,7 @@ python3 -I build.py --features arsenal --out /tmp/t.html   # build thử riêng 
 - **Tên biến trong code game gốc vẫn ngắn** (`lt`, `Ee`, `QC`…) vì tên thật đã mất khi game gốc được nén. Code đã được định dạng lại (xuống dòng, thụt lề) để đọc và sửa thẳng được.
 - **Cài đặt đã lưu:** khoá lưu cũ (trước khi đổi tên game) được tự chép sang khoá `doomzone.*` lần đầu mở bản mới (`common/common.js`), nên không mất cài đặt đồ hoạ, map đã chọn và tên người chơi.
 
-- **Dung lượng:** bản phát hành khoảng 18,5 MB (trước khi nén model là 26 MB). Gần như toàn bộ là model và texture nhúng; code chỉ khoảng 2 MB.
+- **Dung lượng:** `dist/index.html` khoảng 2,4 MB (0,8 MB khi web server nén gzip), `dist/assets/` khoảng 13,5 MB (35 file). Bản `--single` khoảng 20 MB vì model nhúng dạng base64 (to hơn file gốc 1/3).
   - Model được nén hình khối và chuyển động bằng meshopt (`EXT_meshopt_compression`). Game giải nén bằng `common/lib/05_meshopt_decoder.js`, bộ đọc `SX_GLTFLoader` dùng sẵn.
   - Texture dùng WebP.
   - Khi thêm model mới: tối ưu như các model khác (script trong `tools/`), rồi chạy `node tools/compress_assets.mjs <feature>/assets/<file>.glb`.
@@ -44,9 +51,48 @@ Mỗi thư mục feature có thể chứa:
 | `<feature>.js` | Code của feature, chèn vào script của game (giữa `10_game.js` và `90_boot.js`). |
 | `<feature>.css` | Nối sau CSS của game. |
 | `lib/*.js` | Code lấy từ bên ngoài, chèn (theo thứ tự tên file) ngay trước `<feature>.js`. |
-| `assets/*` | File nhị phân, nhúng thành chuỗi base64 `var SX_ASSET_<tên file> = "…"`, nên file game chạy được offline. |
+| `assets/*` | File nhị phân (model, texture). Code đọc mỗi file dưới dạng chuỗi base64 `SX_ASSET_<tên file>`. Bản tách file chép chúng ra `dist/assets/`, bản `--single` nhúng thẳng vào script. |
 
-Thứ tự build nằm ở `FEATURES` trong `build.py`. `common/` luôn build đầu tiên (kể cả khi dùng `--features`): GLTFLoader của three.js r180 (`common/lib/10_gltfloader.js`, đã sửa để dùng three.js có sẵn trong game), các hàm đọc model/ảnh nhúng `SX_parseGLB`, `SX_image`, `SX_timeout`, và bước chuyển cài đặt cũ.
+Thứ tự build nằm ở `FEATURES` trong `build.py`. `common/` luôn build đầu tiên (kể cả khi dùng `--features`): GLTFLoader của three.js r180 (`common/lib/10_gltfloader.js`, đã sửa để dùng three.js có sẵn trong game), các hàm đọc model/ảnh `SX_parseGLB`, `SX_image`, `SX_timeout`, phần tải model theo map (`SX_bootAssets`, `SX_afterAssets`), và bước chuyển cài đặt cũ.
+
+## Tải model theo map (`dist/assets/`)
+
+Trước đây mọi model nằm trong một file `index.html` 20 MB (khoảng 13 MB sau gzip): map nào cũng tải hết, và mỗi lần deploy người chơi tải lại cả 13 MB dù chỉ sửa một dòng code. Mỗi lần push cũng thêm khoảng 10 MB vào lịch sử git.
+
+- **Build (`build.py`):** mỗi file trong `<feature>/assets/` được chép ra `dist/assets/<tên>.<hash 10 ký tự>.<đuôi>`. Tên có hash theo nội dung, nên file không đổi thì giữ nguyên tên và trình duyệt dùng lại bản đã lưu; file đổi thì tên mới, không bao giờ lẫn bản cũ. File cũ không còn dùng được tự xoá khỏi `dist/assets/`. Danh sách `[tên, đường dẫn, số byte, feature]` được ghi vào `game/preload.js`.
+- **Tải sớm (`game/preload.js`, trong `<head>`):** chạy trước khi code game (2,4 MB) tải xong. Script đọc map đang chọn (cùng quy tắc với `SX_MAP`: `?map=` rồi đến `localStorage`), bắt đầu tải các file map đó cần (song song) và hiện "Downloading models x / y MB" trên thanh loading, chiếm 40% đầu thanh.
+- **Map nào tải gì:** file của `desert`, `aircraft`, `cars`, `jets` chỉ tải ở map sa mạc, file của `crossroads` chỉ tải ở Crossroads (bảng `ONLY` trong `game/preload.js`). File của mọi feature khác (`arsenal`, `troopers`…) tải ở mọi map. `?show=` tải tất cả.
+- **Tải muộn (bảng `LATE` trong `game/preload.js`: `aircraft`, `cars`, `jets`):** các model trực thăng, xe, máy bay (6,1 MB) không bắt boot chờ. Chúng tải ngầm ngay sau boot (`SX_assetLater` trong `common/common.js`). Trong lúc chờ, xe và máy bay dùng hình dựng bằng code; model về thì tự thay (các đoạn "swap the look" có sẵn trong `aircraft/`, `cars/`, `jets/`). Các hàm `SXH_gzStart`, `SXC_bgStart`, `SXJ_suStart`… chờ `SX_assetLater(tên, SX_ASSET_tên)` thay vì báo hỏng ngay. Bản `--single` có sẵn chuỗi nên chạy như cũ.
+
+  | Map | Phải chờ trước khi vào | Tải ngầm sau đó | Lần đầu tổng cộng (cả trang) |
+  |---|---|---|---|
+  | Cảng, Waterworks | 4,9 MB (14 file) | — | ≈ 5,7 MB |
+  | Crossroads | 7,0 MB (27 file) | — | ≈ 7,7 MB |
+  | Sa mạc | 5,0 MB (15 file) | 6,1 MB (7 file) | ≈ 11,6 MB, nhưng chỉ chờ ≈ 5,8 MB |
+
+  Lần sau, kể cả sau khi deploy bản sửa code: chỉ tải lại khoảng 0,8 MB của `index.html`, cộng với model nào vừa đổi.
+- **Boot (`SX_bootAssets` trong `common/common.js`, gọi đầu `QC()` ở `game/js/90_boot.js`):** chờ các file tải xong, đổi mỗi file sang base64 và gán vào `window.SX_ASSET_<tên>`, đúng chuỗi mà bản `--single` nhúng sẵn. Nhờ vậy code các feature không phải sửa. `Nr` (`game/js/10_game.js`) xếp các bước boot vào 60% còn lại của thanh.
+- **Lỗi tải:** mỗi file thử lại 1 lần. File vẫn lỗi (404, mất mạng, mở bằng `file://`) thì feature đó dùng hình dựng bằng code như khi thiếu model, và console báo `[assets] <tên> not loaded`. Nếu tải đứng yên 30 giây (`SX_BOOT_TUNE.stallMs`), game boot luôn với phần đã có.
+- **Code chạy ngay lúc nạp script** (trước `QC()`) mà đọc `SX_ASSET_*` thì phải bọc bằng `SX_afterAssets(fn)`: bản `--single` chạy `fn` ngay, bản tách file chạy sau khi tải xong. Hiện chỉ có `CXR_glbStart` (`crossroads/crossroads.js`). Nếu quên, console báo `[assets] <tên> read before it was downloaded` (getter đặt trong `game/preload.js`). Trước khi sửa, lỗi này làm Crossroads mất toàn bộ model nhà, cửa hàng, đường phố mà không báo gì.
+- **Thêm model mới:** đặt vào `<feature>/assets/` như trước. Nếu chỉ một map dùng feature đó, thêm feature vào bảng `ONLY` trong `game/preload.js`.
+- **Đã kiểm tra (Chrome headless, qua `python3 -m http.server`):**
+  - Cả 4 map ra đúng số mesh và tam giác như bản `--single`.
+  - Mỗi map chỉ tải đúng nhóm file của mình.
+  - Mạng 8 Mbit/s: thanh chạy từ 0,6 s. Sa mạc vào game sau 11,9 s (bản debug, HTML 3,6 MB chưa nén); các model tải muộn về tới giây 15 và được thay vào, cảnh cuối cùng ra đúng 967 mesh như bản `--single`.
+  - Chặn shotgun (404): game vẫn boot, dùng shotgun dựng bằng code.
+  - Mở bằng `file://`: boot được với hình dựng bằng code.
+
+### Chơi offline, cài như app (`game/sw.js`, `offline/`)
+
+- **Build tách file ghi thêm:** `dist/sw.js` (từ `game/sw.js`, điền phiên bản = hash của trang + danh sách file), `dist/manifest.webmanifest` (tên, màu nền, `display: fullscreen`, xoay ngang, icon 192/512/maskable) và `dist/icons/`. Trang có thêm `<link rel="manifest">` và các thẻ meta cho iOS. Bản `--single` không có các file này; build `--single` vào `dist/` thì xoá chúng.
+- **Service worker** (`game/preload.js` đăng ký sau sự kiện `load`, chỉ khi chạy qua http/https):
+  - Trang: lấy từ mạng trước, mất mạng thì dùng bản đã lưu (mọi `?query` dùng chung một bản). Nhờ vậy bản deploy mới hiện ra ngay lần tải sau.
+  - `assets/…`: lấy từ bộ nhớ trước (tên có hash, không bao giờ đổi). Google Fonts cũng vậy.
+  - PeerJS, STUN và mọi thứ khác: không đụng tới. Chơi mạng vẫn cần internet.
+  - Mỗi bản build đổi phiên bản, trình duyệt cài worker mới, worker mới thay ngay và xoá các model mà bản mới không còn dùng.
+- **Lần đầu vào:** model tải trước khi worker chạy, nên sau khi tải xong cả file muộn, `SXL.warm()` lấy lại các file của map đó qua worker (từ HTTP cache, không tải lại) để chúng vào bộ nhớ offline. Kết quả: map nào đã chơi thì mở được khi mất mạng.
+- **Settings → "Offline play"** (`offline/offline.js`): ghi những map đã mở được offline ("Offline: Port, Waterworks (2/4 maps)"), nút **Save all maps · x MB** tải nốt các file còn thiếu, và nút **Install app** khi trình duyệt cho cài (Chrome, Edge, Android). iPhone/iPad: Safari → Chia sẻ → Thêm vào MH chính.
+- **Đã kiểm tra** (Chrome headless qua `http://127.0.0.1`): lần đầu vào map cảng, worker lưu 14 file, trang và 3 file font; tắt mạng rồi tải lại thì game vẫn mở, không cảnh báo; Settings ghi 2/4 map; bấm Save all (7,9 MB) thì đủ 4/4 map (35 file); tắt mạng rồi vào sa mạc thì đủ model thật (967 mesh).
 
 ## Chơi nhiều người (`net/`)
 
@@ -91,6 +137,10 @@ Số người một phòng tuỳ map và do host chọn. Ở màn hình chính b
 - **Thắng theo ván (đối kháng: Blue vs Red, hoặc Free-for-all có từ 2 người):** không tính theo kill nữa (kill vẫn được đếm để xem).
   - **Blue vs Red — mỗi ván mỗi người một mạng.** Chết thì không tự hồi sinh; màn hình hiện "You are out — back next round" kèm số người còn sống mỗi bên.
   - **Xem đồng đội khi đã chết (spectate):** camera bám theo một đồng đội còn sống, đứng sau vai (cách khoảng 2,4 m, tự kéo lại gần khi có tường chắn, không xuyên tường). Chuột trái hoặc Space: đồng đội tiếp theo; chuột phải: người trước. Súng trên tay bạn được cất đi; thanh nhỏ dưới màn hình ghi "Spectating <tên>" và số người còn sống mỗi bên. Ván mới bắt đầu thì về góc nhìn của mình. Chỉnh khoảng cách/độ cao ở `SXN_TUNE.spectate`. Đội nào không còn ai sống thì đội kia ăn 1 ván. Chết vì robot, rơi… cũng tính. Hai đội cùng hết người một lúc = hoà, không ai được điểm. **Hết giờ** mà chưa đội nào bị xoá sổ: đội còn nhiều người sống hơn ăn ván ("BLUE WINS ROUND 3 on time (BLUE 2 v 1 RED alive)"), bằng nhau thì hoà.
+  - **Ẩn HUD khi bị hạ:** trong phòng, khi đang xem đồng đội (đấu đội) hoặc chờ hồi sinh (free-for-all), class `body.sxn-down` (`SXN_downClass` trong `net/net.js`) ẩn tâm ngắm, máu, đạn, la bàn, đồ trong người, minimap, điểm đánh dấu trên màn hình và khẩu súng trên tay (CSS cuối `net/net.css`). Hồi sinh thì hiện lại.
+    - Vẫn giữ: bảng kill, tin nhắn, nhiệm vụ, điểm đội/ván, danh sách người chơi, thanh "Spectating …" và đồng hồ hồi sinh.
+    - Khi camera theo đồng đội thì bỏ lớp màu đỏ máu thấp của mình (`G.render.post.lowHealth/damage = 0` ngay trước khi vẽ). Lúc đếm ngược hồi sinh vẫn giữ lớp đỏ như hiệu ứng chết.
+    - Đã thử: 3 trình duyệt headless qua PeerJS, đấu đội (bị hạ → xem đồng đội → ván sau HUD hiện lại) và free-for-all (bị hạ → đếm ngược → hồi sinh).
   - **Free-for-all — mỗi ván theo số phút host đặt (mặc định 3), có hồi sinh** (chết thì 5 giây sau hồi sinh ở chỗ xa người khác). Hết giờ, ai hạ được nhiều người chơi nhất **trong ván đó** thì ăn ván (hạ robot không tính). Bằng nhau ở vị trí cao nhất, hoặc chưa ai hạ được ai, thì hoà. HUD hiện đồng hồ của ván, số người bạn đã hạ trong ván và số cao nhất ("ROUND 2 · 1:47 · KILLS 3 / TOP 4").
   - **Hết ván:** banner ("BLUE WINS ROUND 3 — BLUE 3 : 2 RED"), nghỉ 4 giây, rồi mọi người hồi sinh ở căn cứ với bộ đồ ban đầu, đồ nhặt trên map đặt lại, bất tử 2,5 giây ("ROUND 4 — …").
   - **Thắng trận:** đạt số ván host đặt **và hơn bên kia ít nhất 2 ván**. Ví dụ đặt 5: 5:4 thì đánh tiếp, 6:4 mới thắng.
@@ -138,7 +188,7 @@ Số người một phòng tuỳ map và do host chọn. Ở màn hình chính b
 - **Điểm xuất phát rải trong bán kính 3 m** quanh căn cứ; map có thể đặt nhỏ hơn (`teamSpawns.<đội>.r`, Waterworks 1,4 m để luôn nằm sau tường chắn).
 - **Vào giữa trận:** được.
 - **Map khác host:** game tự tải lại đúng map của host rồi vào lại phòng.
-- **Bạn bè cần gì:** cùng bản game (file `index.html`, hoặc cùng link nếu đã deploy) và có internet.
+- **Bạn bè cần gì:** cùng bản game (cùng link nếu đã deploy, hoặc file của bản `--single`) và có internet.
 - **Kết nối:**
   - WebRTC P2P qua thư viện PeerJS (`net/lib/10_peerjs.min.js`).
   - Máy chủ miễn phí `0.peerjs.com` chỉ dùng để bắt cặp lúc vào phòng (trao đổi mã phòng và thông tin kết nối, trong đó có địa chỉ IP). Dữ liệu trận đấu đi thẳng giữa các máy.
@@ -407,7 +457,13 @@ Map đấu đội nhỏ, bố cục tự thiết kế (không chép map nào c�
   - Game chưa có súng máy và tiểu liên; chỗ "súng máy ở mép nước" đặt một khẩu PAC-9.
 - **Khu tiếp tế trong khu hồi sinh:** nhìn ra phía địch thì **bên trái là khu ĐẠN** (vạch vàng, biển AMMO, kệ hòm đạn: 2 thùng đạn, thùng lựu đạn, hộp 5.56, hộp 12 GA), **bên phải là khu GIÁP · MÁU** (vạch xanh, biển ARMOUR · MEDICAL: áo giáp, mũ, túi cứu thương, túi nhỏ). Blue: đạn phía bắc, giáp phía nam; Red ngược lại.
 - **Đồ nhặt khác:** túi máu lớn dưới cầu thép; phụ kiện rải ngẫu nhiên khắp map (xem "Phụ kiện" ở phần súng).
-- **Chi tiết:** tường bê tông đổ ván khuôn (đường ghép ván, lỗ ty), rêu và vệt bẩn chân tường, vệt rỉ dưới mép tường; hàng rào lưới + dây thép gai trên đỉnh tường bao; sàn có đường cắt mỗi 3 m, rãnh thoát nước có nắp lưới, nắp cống, vết dầu; đáy bể có vệt rong ở mép nước và bùn ở đáy, mặt nước có váng trôi; bồn lắng có mối hàn, cửa người chui, ống nhánh có van, thước đo mực nước, cầu gạt bùn và bộ truyền động trên nóc; khung thép có giằng chéo, đèn pha treo, móc cẩu; hành lang có máng cáp, tủ vòi chữa cháy, van tay, đèn có lồng bảo vệ, số khoang B-01…B-08; sảnh bơm có ốp chân tường, vì kèo thật, khung ô kính, máy bơm có bệ thép, khớp nối, đồng hồ áp, van tay, ống luồn dây, tủ điện MCC có biển điện áp, cửa cuốn. Phần chi tiết chỉ để nhìn, không thêm vật cản.
+- **Chi tiết:** tường bê tông đổ ván khuôn (đường ghép ván, lỗ ty), rêu và vệt bẩn chân tường, vệt rỉ dưới mép tường; hàng rào lưới + dây thép gai trên đỉnh tường bao; sàn có đường cắt mỗi 3 m, rãnh thoát nước có nắp lưới, nắp cống, vết dầu; đáy bể có vệt rong ở mép nước và bùn ở đáy, mặt nước có váng trôi; bồn lắng có mối hàn, cửa người chui, ống nhánh có van, thước đo mực nước, cầu gạt bùn và bộ truyền động trên nóc; khung thép có giằng chéo, đèn pha treo, móc cẩu; hành lang có máng cáp, tủ vòi chữa cháy, van tay, đèn có lồng bảo vệ, số khoang B-01…B-08; sảnh bơm có ốp chân tường, vì kèo thật, khung ô kính, máy bơm có bệ thép, khớp nối, đồng hồ áp, van tay, ống luồn dây, tủ điện MCC có biển điện áp, cửa cuốn. Đồ mỏng chỉ để nhìn; đồ nhô ra có va chạm (mục dưới).
+- **Va chạm cho đồ gắn tường** (`kitCol` / `kitShot` trong `waterworks/waterworks.js`): đồ nhô ra khỏi tường, bồn hoặc máy bơm giờ có hộp va chạm riêng, nên đạn dừng ở đó và không đi xuyên qua được nữa. Thêm 96 hộp (249 → 344).
+  - Chặn cả người lẫn đạn (`kitCol`): 32 cột ốp tường bao, tủ vòi chữa cháy, tay van trên đường ống và trạm van, van cụm ống trong bể, hộp điện ở sân đội, cửa thăm và ống nhánh của bồn lắng, cút hút của máy bơm. Không tính vào lưới đường đi (`noNav`), vì tường bên cạnh đã giữ robot cách xa 0,5 m, nên đường đi của robot không đổi.
+  - Chỉ chặn đạn (`kitShot`, `bulletOnly`) cho đồ trên cao, người không chạm tới: máng cáp, ống trên giá ở hành lang, đèn lồng gắn tường, ống góp và ống đứng trong nhà bơm, cuộn cửa cuốn, móc cẩu.
+  - Thang của bồn lắng chỉ chặn người (`playerOnly`). Đạn lọt qua giữa các bậc, trúng thân bồn ngay phía sau.
+  - Không thêm hộp cho đồ mỏng (nhô ra không quá 10 cm: biển, nẹp, vạch sơn, decal) và dầm thép từ 6,7 m trở lên. Thùng phuy nằm trong bể (không gắn tường) vẫn chưa có va chạm.
+  - Đã kiểm tra: lưới đường đi giống hệt trước; đạn dừng đúng trên từng món; người đi vào dừng cách mặt món đồ 0,32 m; chỗ xuất hiện của đội, FFA và lính robot vẫn nằm trong map và không kẹt vào hộp.
 - **Chơi một mình:** cắt 3 relay (trong hành lang, giữa bể phía bắc bồn, trong sảnh bơm) rồi tới xe EVAC ở khu phía đông. Robot xuất hiện ở hành lang, mép bể, sảnh bơm và khu phía đông.
 - **Map có tường bao** (`arena` trong dữ liệu level = mép trong tường bao): chỗ đặt robot và người chơi khi xuất hiện (`spotOutside` trong `units/units.js`, có truyền độ cao sàn) chỉ tính vật cản ở tầm người, nên mái sảnh bơm không đẩy chỗ xuất hiện ra ngoài; và chỗ đó luôn nằm trong tường bao. Trước đây lính xuất hiện ở sảnh bơm bị đẩy ra ngoài tường bao phía nam, trông như robot đi xuyên tường. Map khác không có `arena` nên vẫn như cũ.
 - **Chó robot (hound, mọi map):** bị người chơi hoặc con khác đẩy trong lúc đang vướng vật cản trước mặt thì không bị đẩy ra khỏi lưới đi lại nữa (trước đây có thể bị đẩy lọt qua tường; sửa trong `game/js/10_game.js`).
@@ -608,6 +664,62 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 ## menu
 
 Nút "Main menu" có ở menu tạm dừng, màn hình khi chết và màn hình hoàn thành nhiệm vụ. Bấm vào thì game tải lại về màn tiêu đề, vẫn giữ map đang chơi. Đang ở trong phòng multiplayer thì nút này cũng rời phòng và bỏ mã phòng khỏi link (trước đây link còn `?join=`/`?host=` nên tải lại là tự vào lại phòng).
+
+## Chế độ Sinh tồn, độ khó, cài đặt thêm (`modes/`)
+
+Nút MODE và độ khó chỉ áp dụng khi chơi một mình; trong phòng nhiều người độ khó luôn là Normal, còn Sinh tồn chọn ở sảnh phòng (mục co-op bên dưới). Lựa chọn lưu ở `localStorage` khoá `doomzone.modes.v1`.
+
+- **Màn hình tiêu đề:** thêm nút **MODE** (Mission ↔ Survival) và **LEVEL** (Easy → Normal → Hard), cùng kiểu nút MAP. Link `?play=survival` / `?play=mission` và `?diff=easy|normal|hard` chọn cho riêng lần mở đó (dùng để test).
+- **Độ khó** (`SXQ_TUNE.diff`):
+
+  | | Sát thương nhận | Sát thương gây ra | Số robot mỗi đợt Sinh tồn |
+  |---|---|---|---|
+  | Easy | ×0,5 | ×1,25 | ×0,75 |
+  | Normal | ×1 | ×1 | ×1 |
+  | Hard | ×1,5 | ×0,8 | ×1,3 |
+
+  - Bọc `G.player.damage` (mọi nguồn sát thương lên người chơi) và `G.combat.playerShot` (mọi viên đạn của người chơi, kể cả dao và súng trên xe). Lựu đạn, C4 không đổi.
+  - Đổi trong Settings có hiệu lực ngay từ phát bắn sau.
+- **Sinh tồn (Survival):** không relay, không xe/thuyền thoát. Robot đến theo đợt, đợt sau đông hơn; chết là hết lượt.
+  - Đợt n: tổng `4 + 2(n−1)` con (nhân hệ số độ khó). Đợt 1: chó robot + 1 lính. Từ đợt 2 có drone (20 %) và lính nhiều dần (15 % + 5 %/đợt, tối đa 50 %), lính bắn tỉa từ đợt 3. Đợt 5, 10, 15…: lính nặng (Heavy).
+  - Robot xuất hiện ở các điểm sinh robot của map (`enemySpawns`), ưu tiên chỗ cách 18–75 m và khuất tầm nhìn. Tối đa 12 con của đợt cùng lúc, số còn lại chờ (lính còn bị giới hạn 6 con của `troopers/`).
+  - Từ đợt 2, đạn của người chơi yếu đi 4 % mỗi đợt (tối đa −45 %), tức robot trâu dần.
+  - Hết đợt: nghỉ 15 giây, hồi 35 máu, đạn mỗi súng đang có được nạp đủ 2 băng dự trữ.
+  - Robot còn sót sau 150 giây mà ở xa hơn 60 m thì không tính nữa (tránh kẹt đợt vì robot mắc kẹt).
+  - Dòng nhiệm vụ trên HUD: "Survival · wave 3 · 7 machines left" / "Wave 3 cleared · next wave in under 15 s". Đồng hồ nghỉ nhảy theo bước 5 giây, vì mỗi lần chữ đổi HUD gõ lại và nháy cả dòng (đếm từng giây thì dòng không bao giờ gõ xong). Ẩn hàng Relays.
+  - Màn hình chết: số đợt đã qua, số kill, kỷ lục (hoặc "New best!"). Kỷ lục theo map + độ khó, lưu ở `doomzone.survival.v1` (hơn nhau ở số đợt, rồi số kill). Màn hình tiêu đề hiện kỷ lục khi chọn Survival.
+  - Cách nối với game: cờ `window.SXQ_SURV` làm luồng nhiệm vụ trong `game/js/10_game.js` bỏ relay, điểm đánh dấu, lời radio mở đầu và dòng nhiệm vụ; `troopers/troopers.js` không gửi đội lính của nhiệm vụ. Robot boss của sa mạc và lính đồn trú ở cứ điểm vẫn ra như thường.
+  - Sự kiện cho phần khác: `survival:wave`, `survival:cleared`, `survival:over`.
+- **Sinh tồn chơi chung (co-op):**
+  - **Chọn ở phòng chơi mạng:** host bấm **Survival · Co-op waves** (cạnh Blue vs Red, Free-for-all). Mọi người vào chung đội Blue, ẩn chọn đội, số ván, phút mỗi ván và mục Robots (`SXN.mode 'surv'` trong `net/net.js`).
+  - **Chỉ host chạy các đợt** (code Sinh tồn của `modes/modes.js`, `SXQ_survOn` đúng cho host trong phòng Survival). Đợt to theo số người: ×(1 + 0,5·(số người − 1)); tối đa min(20, 12 + 3·(số người − 1)) robot cùng lúc. Độ khó luôn Normal. Robot được gửi lần lượt tới từng người còn sống.
+  - **Host gửi trạng thái đợt** (`'sv'` mỗi 0,5 s và khi đổi): đợt, đánh/nghỉ, thời gian, số robot còn lại, số đợt đã qua. Máy khách giữ bản sao (`SXQ_mirror`), hiện cùng dòng nhiệm vụ, tự nhận hồi máu và đạn khi hết đợt, phát `survival:wave` / `survival:cleared` (thống kê đếm đúng).
+  - **Bị hạ:** xem đồng đội (ẩn HUD như đấu đội), "You are down — back when this wave is cleared". Hết đợt thì hồi sinh cạnh một đồng đội còn đứng (`SXN_survNear`).
+  - **Cả đội cùng gục:** hết lượt. Mọi máy hiện bảng kết quả (đợt, số đợt qua, robot và số lần chết từng người, MVP) và lưu kỷ lục co-op theo map (`doomzone.survival.v1`, khoá `<map>|coop`). Lượt mới tự bắt đầu sau 20 s, hoặc host bấm Play again: dọn robot, cả đội về căn cứ.
+  - **Còn hạn chế:** người vào giữa lượt xuất hiện ngay ở căn cứ (không chờ hết đợt); hồi sinh thì về bộ đồ ban đầu (mất súng đã nhặt); host rời phòng giữa lượt thì lượt dừng; boss sa mạc vẫn ra theo số kill của phòng.
+  - **Đã thử:** 3 trình duyệt qua PeerJS (Crossroads và Port). Đợt 1 cả 3 máy thấy cùng số robot và dòng nhiệm vụ; một người bị hạ thì xem đồng đội, hết đợt hồi sinh cách đồng đội 2–5 m; cả đội gục thì cả 3 máy hiện kết quả và lưu kỷ lục; Play again chạy lại. Chơi một mình và đấu đội không đổi.
+- **Settings thêm 3 dòng:** Difficulty; **Aim sensitivity** (0,3–1,5×, nhân vào mức giảm độ nhạy khi ngắm `Mt.adsLook` = 0,6 của game); **FPS counter** (góc trên trái). Bảng Settings có sẵn của game đã có chất lượng đồ hoạ (low/medium/high/ultra), độ nhạy chuột, đảo trục Y, âm lượng, FOV, toàn màn hình.
+- **Đã kiểm tra:** cả 4 map ở cả 2 chế độ không lỗi console; đợt 1 có robot ở mọi map; đợt 1→9 tăng 4, 6, 8…20 con, đợt 5 có lính nặng, không quá 12 con cùng lúc, vẫn 60 FPS; chết thì lưu kỷ lục, màn hình chết đúng số. Sát thương nhận / gây ra khi bắn thân: Easy 10 / 37,5, Normal 20 / 30, Hard 30 / 24.
+
+## Thống kê và thành tích (`stats/`)
+
+Lưu trên máy người chơi (`localStorage` khoá `doomzone.stats.v1`), không gửi đi đâu. Nút **STATS** ở màn hình tiêu đề và menu tạm dừng mở bảng "Service record"; Esc hoặc Close để đóng (đang tạm dừng thì vẫn tạm dừng). Có nút Reset (bấm 2 lần).
+
+- **Số liệu:** robot đã hạ, người chơi đã hạ (online), số lần chết, K/D, độ chính xác, kill bắn đầu (và % trên tổng kill), kill xa nhất, súng hay dùng nhất, nhiệm vụ đã xong (và trên Hard), lượt Sinh tồn tốt nhất, thời gian chơi.
+  - Kill khi chơi một mình: viên đạn, vụ nổ hoặc súng trên xe của người chơi hạ robot (`player:hitEnemy` có `killed`). Online: theo điểm host tính (`net:myKill`, phát ra trong `net/net.js`), hạ người chơi tính riêng.
+  - Kill bắn đầu: phát hạ trúng điểm yếu (`part 'weak'`).
+  - Độ chính xác: mỗi tia của `G.combat.playerShot` là một phát, giống cách tính Accuracy ở màn hình tổng kết của game (shotgun tính từng viên đạn chì).
+- **14 thành tích:** First blood, Scrap dealer (100 robot), Machine breaker (500), Sharpshooter (25 kill bắn đầu), Long shot (kill từ 100 m), Up close (kill bằng dao), Triple (3 kill trong 4 giây), Lights out (xong 1 nhiệm vụ), World tour (xong nhiệm vụ ở cả 4 map), The hard way (xong nhiệm vụ ở Hard), Steady hands (xong nhiệm vụ với độ chính xác ≥ 50 %, tối thiểu 20 phát), Holding the line (qua 5 đợt Sinh tồn), Last one standing (qua 10 đợt), Rival (hạ một người chơi online). Mở khoá thì hiện thông báo ở trên giữa màn hình.
+- **Đã kiểm tra:** bắn hạ lính bằng `playerShot` thì đếm đúng kill, kill bắn đầu, số phát, phát trúng, khoảng cách; mở khoá First blood và Triple; chết thì tăng số lần chết; dữ liệu còn sau khi tải lại trang. Kill bằng dao ghi đúng "Knife" (trước đây `SXK_weapon` trong `score/score.js` chỉ nhận ra dao sau phát chém đầu tiên, nên kill một nhát ghi tên khẩu súng đang cầm; giờ nhận ra cả lúc đang chém hoặc đang cầm dao).
+- Bộ đếm kill góc trên phải ẩn khi bảng Settings/Controls đang mở (trước đây đè lên tiêu đề tab).
+
+## Đổi phím (`keys/`)
+
+- **Đổi phím:** Settings → Controls → "Keyboard · Mouse" là danh sách 27 thao tác. Bấm vào phím của một dòng, rồi bấm phím mới (Esc để huỷ). Phím đã dùng cho thao tác khác thì hai thao tác đổi phím cho nhau. Có nút "Reset to defaults". Lưu ở `localStorage` khoá `doomzone.keys.v1` (chỉ ghi phím đã đổi). Esc (tạm dừng) và các nút chuột không đổi được.
+- **Cách làm:** mọi phím của game (trừ bản đồ M) đi qua một bảng `h_` trong `game/js/10_game.js` (mã phím → thao tác). `keys/keys.js` chụp bảng gốc sau khi game khởi động rồi ghi lại bảng đó theo phím đã chọn, nên người chơi, súng, nghiêng người và xe đều theo phím mới mà không phải gửi lại sự kiện. Thao tác đổi phím thì bỏ luôn phím phụ của nó (Shift phải, Ctrl, phím số bên phải).
+- **Bản đồ:** `minimap/minimap.js` đọc thẳng phím M, nên một bộ nghe phím chạy trước mọi bộ khác chuyển phím đã chọn thành M, và chặn M thật khi bản đồ đã đổi phím. Nếu M được gán cho thao tác khác thì vẫn chạy thao tác đó (qua mã thay thế `SXKB_KeyM`). Đang gõ trong ô nhập (tên, mã phòng) thì không đụng tới.
+- **Gợi ý phím trên màn hình:** dòng "Hold F" khi đứng cạnh relay hoặc xe và bảng phím ở màn hình tiêu đề hiện phím đã chọn. Dòng hướng dẫn 5 giây đầu trận của arsenal ("G — grenade…"), chân trang balo và phím Space đổi người khi xem đồng đội (`net/net.js`) vẫn theo phím gốc.
+- **Đã kiểm tra:** headless, đổi phím qua chính giao diện: R→K, Space→J, W→↑, Q→Z, M→N. Phím mới chạy đúng thao tác (nạp đạn, nhảy 1 m, đi tới 3,1 m mà không ngửa camera, nghiêng, mở bản đồ), phím cũ không còn tác dụng. Đổi chéo hai phím, Esc huỷ, Reset đều đúng. Gõ trong ô nhập không kích hoạt game. Không có lỗi console.
 
 ## Va chạm, âm thanh, hiệu năng
 

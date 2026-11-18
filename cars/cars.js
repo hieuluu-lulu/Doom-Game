@@ -227,11 +227,14 @@ var SXC_BGT = { s: 0.00664, wheelY: 36.09, midZ: -130.88, at: [-0.24, -0.03], gu
 function SXC_bgStart() {
   if (SXC_BG.started) return
   SXC_BG.started = true
-  if (typeof SX_ASSET_buggy !== 'string' || typeof SX_parseGLB !== 'function') { SXC_BG.failed = true; return }
-  SX_parseGLB(SX_ASSET_buggy).then(function (g) {
-    try { SXC_BG.scene = g.scene; SXC_BG.geo = SXC_bgGeometry(g.scene); SXC_bgSpec(SXC_BG.geo); SXC_BG.ready = true }
-    catch (e) { SXC_BG.failed = true; console.warn('[sx-cars] Buggy model unusable, procedural Sandcat', e) }
-  }, function (e) { SXC_BG.failed = true; console.warn('[sx-cars] Buggy model failed, procedural Sandcat', e) })
+  // a split build downloads it after boot (common/common.js SX_assetLater); the Sandcat swaps when it lands
+  SX_assetLater('buggy', typeof SX_ASSET_buggy === 'string' && SX_ASSET_buggy).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { SXC_BG.failed = true; return }
+    SX_parseGLB(b64).then(function (g) {
+      try { SXC_BG.scene = g.scene; SXC_BG.geo = SXC_bgGeometry(g.scene); SXC_bgSpec(SXC_BG.geo); SXC_BG.ready = true }
+      catch (e) { SXC_BG.failed = true; console.warn('[sx-cars] Buggy model unusable, procedural Sandcat', e) }
+    }, function (e) { SXC_BG.failed = true; console.warn('[sx-cars] Buggy model failed, procedural Sandcat', e) })
+  })
 }
 // the model in the Sandcat body frame (front -Z, wheel centres at y = at[0])
 function SXC_bgHold(scene) {
@@ -410,11 +413,13 @@ var SXC_TMVT = {
 function SXC_tmvStart() {
   if (SXC_TMV.started) return
   SXC_TMV.started = true
-  if (typeof SX_ASSET_tmv !== 'string' || typeof SX_parseGLB !== 'function') { SXC_TMV.failed = true; return }
-  SX_parseGLB(SX_ASSET_tmv).then(function (g) {
-    try { SXC_TMV.parts = SXC_tmvParts(g.scene); SXC_tmvSpec(SXC_TMV.parts); SXC_TMV.ready = true }
-    catch (e) { SXC_TMV.failed = true; console.warn('[sx-cars] TMV model unusable, procedural Rhino', e) }
-  }, function (e) { SXC_TMV.failed = true; console.warn('[sx-cars] TMV model failed, procedural Rhino', e) })
+  SX_assetLater('tmv', typeof SX_ASSET_tmv === 'string' && SX_ASSET_tmv).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { SXC_TMV.failed = true; return }
+    SX_parseGLB(b64).then(function (g) {
+      try { SXC_TMV.parts = SXC_tmvParts(g.scene); SXC_tmvSpec(SXC_TMV.parts); SXC_TMV.ready = true }
+      catch (e) { SXC_TMV.failed = true; console.warn('[sx-cars] TMV model unusable, procedural Rhino', e) }
+    }, function (e) { SXC_TMV.failed = true; console.warn('[sx-cars] TMV model failed, procedural Rhino', e) })
+  })
 }
 // model frame → Rhino body frame (front -Z, wheel centres at y = at[0])
 function SXC_tmvMatrix() {

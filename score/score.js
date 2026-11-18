@@ -33,8 +33,10 @@ function SXK_weapon() {
   var G = SXK.G
   try { if (G.units && G.units.pilot) return G.units.pilot.label || G.units.pilot.type } catch (e) { }
   try {
-    var L = G.weapon.arsenal.loadout
-    if (L.knifeHitT && performance.now() - L.knifeHitT < 900) return 'Knife' // the last hit was a slash
+    var L = G.weapon.arsenal.loadout, K = G.weapon.arsenal.knife
+    // a slash in progress / the knife in hand (knifeHitT is only set after the
+    // slash's own hit, so a one-slash kill would read as the gun), or a recent slash
+    if ((K && (K.out || K.mode)) || (L.knifeHitT && performance.now() - L.knifeHitT < 900)) return 'Knife'
     return { rifle: 'Rifle', pistol: 'Pistol', shotgun: 'Shotgun', sniper: 'Sniper' }[L.cur] || ''
   } catch (e) { return '' }
 }
@@ -76,6 +78,9 @@ function SXK_tick(dt) {
   var G = SXK.G, ui = SXK_buildUi()
   if (!ui) return
   var st = G.game && G.game.state, on = st === 'playing' || st === 'paused'
+  // the Settings / Controls panel covers the top right: the counter would sit on its tabs
+  if (!SXK.panel || !SXK.panel.isConnected) SXK.panel = document.querySelector('#ui .menu .panel')
+  if (on && st === 'paused' && SXK.panel && !SXK.panel.hidden) on = false
   if (ui._on !== on) { ui._on = on; ui.root.classList.toggle('on', on) }
   if (!on) return
   SXK_set(ui.count, '_v', String(SXK.kills))

@@ -1,0 +1,11 @@
+/* MODES: the title's Mode / Level buttons, the Survival best line, death-screen rows, FPS counter */
+.menu .sxq-best { margin-top: 10px; color: var(--signal); }
+.menu .sxq-best[hidden], .menu .m-title .m-note[hidden] { display: none; }
+.sxq-surv .h-relays { display: none; }
+.menu .m-stats .sxq-new dd { color: var(--signal); }
+.sxq-fps {
+  position: fixed; left: 10px; top: 8px; z-index: 40; pointer-events: none;
+  font: 500 12px/1 var(--f-mono, monospace); letter-spacing: .06em; color: rgba(232, 228, 218, .85);
+  background: rgba(10, 12, 14, .55); padding: 4px 6px;
+}
+.sxq-fps[hidden] { display: none; }

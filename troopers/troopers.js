@@ -794,6 +794,9 @@ SXU_PLUGINS.push(function SXT_plugin(U, G) {
     SXT_STATE.now += dt
     if (!playing()) return
     mission = mission.filter(function (u) { return u.alive })
+    // Survival (modes/modes.js) sends its own waves: no mission squads then
+    var surv = typeof SXQ_survOn === 'function' && SXQ_survOn()
+    if (surv) { pending.length = 0; reinfT = 60 }
     for (var k = pending.length - 1; k >= 0; k--) {
       if (pending[k].t <= now) { spawnSquad(pending[k].n); pending.splice(k, 1) }
     }

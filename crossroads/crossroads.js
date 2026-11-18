@@ -194,7 +194,8 @@ function CXR_asset(k) {
     cx_skin_oabrick: typeof SX_ASSET_cx_skin_oabrick !== 'undefined' && SX_ASSET_cx_skin_oabrick }
   return m[k] || null
 }
-if (CXR_ON) CXR_glbStart()
+// a split build has the files once boot downloaded them (common/common.js)
+if (CXR_ON) SX_afterAssets(CXR_glbStart)
 
 // every mesh of a model, baked into the model root's space as float, indexed
 // geometry with position/normal/uv; `top` = the child of the root it hangs under

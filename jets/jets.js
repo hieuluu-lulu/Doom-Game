@@ -338,8 +338,11 @@ SXJ_SUT.oz = 0.25 + SXJ_SUT.midX * SXJ_SUT.s       // centred like the old Talon
 function SXJ_suStart() {
   if (SXJ_SU.started) return
   SXJ_SU.started = true
-  if (typeof SX_ASSET_su57 !== 'string' || typeof SX_parseGLB !== 'function') { SXJ_SU.failed = true; return }
-  SX_parseGLB(SX_ASSET_su57).then(function (g) { SXJ_SU.scene = g.scene; SXJ_SU.ready = true }, function (e) { SXJ_SU.failed = true; console.warn('[jets] Su-57 model failed, procedural Talon', e) })
+  // a split build downloads it after boot (common/common.js SX_assetLater); the Talon swaps when it lands
+  SX_assetLater('su57', typeof SX_ASSET_su57 === 'string' && SX_ASSET_su57).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { SXJ_SU.failed = true; return }
+    SX_parseGLB(b64).then(function (g) { SXJ_SU.scene = g.scene; SXJ_SU.ready = true }, function (e) { SXJ_SU.failed = true; console.warn('[jets] Su-57 model failed, procedural Talon', e) })
+  })
 }
 // GLB point → Talon frame (nose -Z, origin gearH above the wheels)
 function SXJ_suP(x, y, z) { var T = SXJ_SUT; return new lt.Vector3(z * T.s, y * T.s + T.oy, -x * T.s + T.oz) }
@@ -420,9 +423,11 @@ function SXJ_glbStart(key) {
   var L = SXJ_GLB[key]
   if (!L || L.started) return
   L.started = true
-  var b64 = typeof SX_ASSET_harrow !== 'undefined' && key === 'harrow' ? SX_ASSET_harrow : typeof SX_ASSET_petrel !== 'undefined' && key === 'petrel' ? SX_ASSET_petrel : null
-  if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { L.failed = true; return }
-  SX_parseGLB(b64).then(function (g) { L.scene = g.scene; L.ready = true }, function (e) { L.failed = true; console.warn('[jets] ' + key + ' model failed, procedural one stays', e) })
+  var have = typeof SX_ASSET_harrow !== 'undefined' && key === 'harrow' ? SX_ASSET_harrow : typeof SX_ASSET_petrel !== 'undefined' && key === 'petrel' ? SX_ASSET_petrel : null
+  SX_assetLater(key, have).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { L.failed = true; return }
+    SX_parseGLB(b64).then(function (g) { L.scene = g.scene; L.ready = true }, function (e) { L.failed = true; console.warn('[jets] ' + key + ' model failed, procedural one stays', e) })
+  })
 }
 // GLB → game frame: turned 180° (nose -Z), scaled, origin where the game wants it
 var SXJ_HVT = { s: 0.95, oz: 0.3 }

@@ -1,0 +1,18 @@
+/* KEYS: the Key bindings list in Settings → Controls */
+.sxkb { margin: 2px 0 6px; }
+.sxkb-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.sxkb-top span { font: 400 11px/1.4 var(--f-mono); color: var(--steel); }
+.sxkb-top .btn { flex: none; white-space: nowrap; }
+.sxkb-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 0; min-height: 30px; }
+.sxkb-row + .sxkb-row { border-top: 1px solid rgba(232, 228, 218, 0.07); }
+.sxkb-row span { font: 500 12px/1.3 var(--f-label); letter-spacing: 0.16em; text-transform: uppercase; color: var(--steel); }
+.sxkb-row span small { display: block; font: 400 10px/1.3 var(--f-mono); letter-spacing: 0.02em; text-transform: none; color: var(--bone-faint); }
+.sxkb-row b { font: 500 13px/1.3 var(--f-label); letter-spacing: 0.04em; color: var(--bone-dim); }
+.sxkb-key {
+  min-width: 92px; min-height: 26px; padding: 3px 10px 2px; cursor: pointer; background: transparent;
+  font: 500 11px/1 var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--bone);
+  border: 1px solid rgba(232, 228, 218, 0.45); border-radius: 0;
+}
+.sxkb-key:hover { border-color: var(--bone); }
+.sxkb-key.moved { color: var(--signal); border-color: rgba(255, 179, 71, 0.6); }
+.sxkb-key.listen { color: var(--ink); background: var(--signal); border-color: var(--signal); }

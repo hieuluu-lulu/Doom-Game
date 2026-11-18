@@ -1,0 +1,4 @@
+/* OFFLINE: the Settings row (status text + Save all maps / Install app) */
+.menu .sxof { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.menu .sxof [data-sxof-s] { font: 500 13px/1.3 var(--f-mono); color: var(--bone); }
+.menu .sxof .btn[hidden] { display: none; }

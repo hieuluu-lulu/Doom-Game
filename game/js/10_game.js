@@ -29172,7 +29172,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
           !ve)
         )
           return;
-        let _e = i.input.touch ? "USE" : i.input.gamepad && !i.input.locked ? "Y" : "F";
+        // mod: the bound Use key (keys/keys.js)
+        let _e = i.input.touch ? "USE" : i.input.gamepad && !i.input.locked ? "Y" : typeof SXKB_label == "function" ? SXKB_label("interact") : "F";
         _e !== X.promptKey &&
           ((X.promptKey = _e), (_.textContent = _e), _.classList.toggle("wide", _e.length > 1));
         let Te = `Hold ${_e} \u2014 ${k}`;
@@ -29459,7 +29460,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
           <button class="btn" data-act="settings">Settings</button>
           <button class="btn m-only-narrow" data-act="controls">Controls</button>
         </div>
-        <p class="m-note">Every surface, machine and sound is generated in your browser. Nothing is downloaded.</p>
+        <p class="m-note">Runs in your browser, nothing to install. Your stats and best runs stay on this device.</p>
       </div>
       <aside class="m-legend" aria-label="Controls at a glance">
         <div><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span><span><kbd>Mouse</kbd> Look</span><span><kbd>LMB</kbd> Fire</span><span><kbd>RMB</kbd> Aim</span><span><kbd>R</kbd> Reload</span></div>
@@ -29572,7 +29573,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
     }
     function g() {
       let U = n.quality === "auto" ? i.quality && i.quality.name : n.quality;
-      for (let D of r(".seg button")) D.setAttribute("aria-pressed", String(D.dataset.q === U));
+      // mod: only the quality buttons (modes/modes.js adds a Difficulty .seg)
+      for (let D of r(".seg button[data-q]")) D.setAttribute("aria-pressed", String(D.dataset.q === U));
       ((u.value = n.sens),
         (h.value = Math.round(n.volume * 100)),
         (f.value = n.fov),
@@ -29966,7 +29968,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
     function q() {
       if (!o.setMarkers) return;
       let P = c.relays
-        .filter((V) => !V.cut && !window.SXN_MP)
+        .filter((V) => !V.cut && !window.SXN_MP && !window.SXQ_SURV) // mod: no relay markers in Survival
         .map((V) => ({
           id: V.id,
           short: V.short,
@@ -30014,6 +30016,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
     }
     function D() {
       if (window.SXN_MP && typeof SXN_objectiveText == "function") return SXN_objectiveText();
+      if (window.SXQ_SURV && typeof SXQ_objective == "function") return SXQ_objective(); // mod: Survival
       if (c.allCut) return SXD_T("Get to the boat");
       let P = c.relays.length - c.cut;
       return c.cut === 0
@@ -30224,7 +30227,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       return P;
     }
     function ue(P) {
-      if (window.SXN_MP) {
+      // mod: no relays to cut and no boat in an online room or in Survival (modes/modes.js)
+      if (window.SXN_MP || window.SXQ_SURV) {
         o.setPrompt && o.setPrompt(null);
         return;
       }
@@ -30314,7 +30318,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
           return (
             (e.fade = 1 - sl(0.25, Math.min(h, 2.6), u)),
             !f && u > 0.5 && ((f = !0), l.locationCard(!0)),
-            !p && u > 1.3 && ((p = !0), !window.SXN_MP && o.radio && o.radio(_l.intro, 4.2)),
+            !p && u > 1.3 && ((p = !0), !window.SXN_MP && !window.SXQ_SURV && o.radio && o.radio(_l.intro, 4.2)),
             u > h - 0.6 && !o.root?.classList.contains("on") && (o.show(!0), o.setObjective(D())),
             u >= h && (l.locationCard(!1), (e.fade = 0), T()),
             !0
@@ -30415,5 +30419,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
   }
   var KC = () => new Promise((i) => setTimeout(i, 0));
   async function Nr(i, e) {
-    (xM && (xM.textContent = SXD_T(i)), yM && (yM.style.width = Math.round(e * 100) + "%"), await KC());
+    // mod: a split build's asset download (SX_bootAssets) fills the bar's first SX_BOOT_BASE
+    let b0 = typeof SX_BOOT_BASE == "number" ? SX_BOOT_BASE : 0;
+    (xM && (xM.textContent = SXD_T(i)), yM && (yM.style.width = Math.round((b0 + e * (1 - b0)) * 100) + "%"), await KC());
   }

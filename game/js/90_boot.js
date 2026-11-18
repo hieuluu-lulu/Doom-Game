@@ -39,6 +39,8 @@
       let g = performance.now() - v;
       g > 150 && console.log(`[boot] ${h} ${g.toFixed(0)}ms`);
     }
+    // mod: a split build downloads this map's models first (common/common.js)
+    if (typeof SX_bootAssets === "function") await SX_bootAssets(i);
     if (
       (await Nr("Waking the renderer", 0.04),
       await r("render", "render", () => Hg(t), !0),

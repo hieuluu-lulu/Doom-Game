@@ -387,8 +387,11 @@ var SXH_GZT = {
 function SXH_gzStart() {
   if (SXH_GZ.started) return
   SXH_GZ.started = true
-  if (typeof SX_ASSET_gazelle !== 'string' || typeof SX_parseGLB !== 'function') { SXH_GZ.failed = true; return }
-  SX_parseGLB(SX_ASSET_gazelle).then(function (g) { SXH_GZ.scene = g.scene; SXH_GZ.ready = true }, function (e) { SXH_GZ.failed = true; console.warn('[aircraft] Gazelle model failed, procedural Kestrel', e) })
+  // a split build downloads it after boot (common/common.js SX_assetLater); the Kestrel swaps when it lands
+  SX_assetLater('gazelle', typeof SX_ASSET_gazelle === 'string' && SX_ASSET_gazelle).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { SXH_GZ.failed = true; return }
+    SX_parseGLB(b64).then(function (g) { SXH_GZ.scene = g.scene; SXH_GZ.ready = true }, function (e) { SXH_GZ.failed = true; console.warn('[aircraft] Gazelle model failed, procedural Kestrel', e) })
+  })
 }
 // GLB frame → Kestrel frame (nose -Z, origin 1.55 above the skids)
 function SXH_gzPoint(p) { return new lt.Vector3(-p[0], p[1] + SXH_GZT.y, -p[2]) }
@@ -1004,8 +1007,10 @@ var SXH_APT = {
 function SXH_apStart() {
   if (SXH_AP.started) return
   SXH_AP.started = true
-  if (typeof SX_ASSET_apache !== 'string' || typeof SX_parseGLB !== 'function') { SXH_AP.failed = true; return }
-  SX_parseGLB(SX_ASSET_apache).then(function (g) { SXH_AP.scene = g.scene; SXH_AP.ready = true }, function (e) { SXH_AP.failed = true; console.warn('[aircraft] Apache model failed, procedural Skua', e) })
+  SX_assetLater('apache', typeof SX_ASSET_apache === 'string' && SX_ASSET_apache).then(function (b64) {
+    if (typeof b64 !== 'string' || typeof SX_parseGLB !== 'function') { SXH_AP.failed = true; return }
+    SX_parseGLB(b64).then(function (g) { SXH_AP.scene = g.scene; SXH_AP.ready = true }, function (e) { SXH_AP.failed = true; console.warn('[aircraft] Apache model failed, procedural Skua', e) })
+  })
 }
 function SXH_apP(p, out) {
   var A = SXH_APT

@@ -1,4 +1,4 @@
-# Publishes dist/ (the built game: dist/index.html, committed by `python3 build.py`)
+# Publishes dist/ (the built game: dist/index.html + dist/assets/, committed by `python3 build.py`)
 # to GitHub Pages on every push to main. No build here — the page is prebuilt.
 # One-time setup by the repo owner: Settings → Pages → Source: GitHub Actions
 # (and, on a free plan, the repository must be public).

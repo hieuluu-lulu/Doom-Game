@@ -282,6 +282,13 @@ async function WW_level(i) {
   function label(text, size, x, y, z, face, color, font) {
     try { return t.label(text, size, x, y, z, face, { color: color || 'white', font: font || 'stencil' }) } catch (e) { return null }
   }
+  // kit on the walls, the tank and the pumps (pilasters, cabinets, valves,
+  // lamps, pipes): a box round each thing that stands proud, so bullets stop
+  // on it and nobody walks through it. kitCol: bodies + bullets, kept off the
+  // nav grid (the wall beside it already keeps the robots' paths 0.5 m off);
+  // kitShot: bullets only, for kit overhead, out of reach
+  function kitCol(x0, y0, z0, x1, y1, z1, surface) { t.col(x0, y0, z0, x1, y1, z1, surface || 'metal', { noNav: true }) }
+  function kitShot(x0, y0, z0, x1, y1, z1, surface) { t.col(x0, y0, z0, x1, y1, z1, surface || 'metal', { bulletOnly: true }) }
 
   /* ---- the floor ---------------------------------------------------------- */
   // (physics ground = the height field; these are the visible floor, no colliders)
@@ -325,13 +332,18 @@ async function WW_level(i) {
   t.slab(conc, -25.8, H0, 22.9, 25.8, H0 + 0.25, 23.8)
   t.slab(conc, -25.8, H0, -22.9, -24.9, H0 + 0.25, 22.9)
   t.slab(conc, 24.9, H0, -22.9, 25.8, H0 + 0.25, 22.9)
+  // pilasters stand 0.28 m proud of the wall: solid
   for (var px = -24; px <= 24.01; px += 6) {
     t.slab(conc, px - 0.25, 0, -23, px + 0.25, H0, -22.72)
     t.slab(conc, px - 0.25, 0, 22.72, px + 0.25, H0, 23)
+    kitCol(px - 0.25, 0, -23, px + 0.25, H0, -22.72, 'concrete')
+    kitCol(px - 0.25, 0, 22.72, px + 0.25, H0, 23, 'concrete')
   }
   for (var pz = -18; pz <= 18.01; pz += 6) {
     t.slab(conc, -25, 0, pz - 0.25, -24.72, H0, pz + 0.25)
     t.slab(conc, 24.72, 0, pz - 0.25, 25, H0, pz + 0.25)
+    kitCol(-25, 0, pz - 0.25, -24.72, H0, pz + 0.25, 'concrete')
+    kitCol(24.72, 0, pz - 0.25, 25, H0, pz + 0.25, 'concrete')
   }
   // rust streaks under the coping
   for (var k0 = 0; k0 < 26; k0++) {
@@ -442,15 +454,18 @@ async function WW_level(i) {
     t.ibeam(dark, 'z', 7.2, rx, 6.75, -19.6, { depth: 0.36, width: 0.2 })
     t.box(dark, 0.22, 2.8, 0.22, rx, HI + 1.4, -16.0)
     t.box(dark, 0.12, 0.12, 1.2, rx, 4.35, -16.8)
+    kitShot(rx - 0.11, HI, -16.11, rx + 0.11, HI + 2.8, -15.89) // the post on the wall top
   }
   t.cyl(galv, 0.18, 49.8, 0, 4.55, -16.75, { axis: 'x', seg: 12 })
   t.cyl(tealM, 0.14, 49.8, 0, 4.55, -17.2, { axis: 'x', seg: 12 })
+  kitShot(-24.9, 4.29, -17.4, 24.9, 4.73, -16.2) // both pipes on their brackets
   // two valve stations off the inner wall, a low block in the middle
   ;[-1, 1].forEach(function (s) {
     var x0 = s * 12.2, x1 = s * 13.9
     blk(greyM, x0, 0, -17.8, x1, 2.1, -16.2, 'metal', { bevel: 0.03 })
     t.slab(dark, Math.min(x0, x1) - 0.05, 2.1, -17.85, Math.max(x0, x1) + 0.05, 2.18, -16.2)
     t.cyl(redM, 0.32, 0.06, s * 13.05, 1.25, -17.84, { axis: 'z', seg: 16 })
+    kitCol(s * 13.05 - 0.32, 0.93, -17.87, s * 13.05 + 0.32, 1.57, -17.8) // the handwheel
     t.cyl(dark, 0.12, 0.6, s * 13.05, 1.6, -17.5, { seg: 10 })
     label('V-' + (s < 0 ? '3' : '4'), 0.3, s * 13.05, 1.85, -17.82, 'z-', 'white', 'stencil')
     place('pallet', s * 18.4, -21.2, 0.2 * s, { seed: 50 + s })
@@ -482,6 +497,9 @@ async function WW_level(i) {
   // ladder on the south side (facing the pump hall)
   for (var lr of [-0.24, 0.24]) t.box(dark, 0.05, TK.top - ty0 + 1, 0.05, TK.x + lr, (ty0 + TK.top + 1) / 2, TK.z + TK.r + 0.2)
   for (var ly = ty0 + 0.3; ly < TK.top + 0.9; ly += 0.3) t.box(dark, 0.5, 0.03, 0.03, TK.x, ly, TK.z + TK.r + 0.2)
+  // rails and rungs: bodies stop on it; bullets go between the rungs to the
+  // shell 0.2 m behind (the hoops above head height are open, no box)
+  t.col(TK.x - 0.27, ty0, TK.z + TK.r, TK.x + 0.27, TK.top + 1, TK.z + TK.r + 0.23, 'metal', { noNav: true, playerOnly: true })
   for (var hy = 2.6; hy < TK.top + 0.9; hy += 0.75) t.cyl(dark, 0.42, 0.04, TK.x, hy, TK.z + TK.r + 0.32, { seg: 12, open: true, rTop: 0.42 })
   // flat labels on a round shell: kept small so their ends stay close to it (the ladder side has none)
   label('CLARIFIER 2', 0.32, TK.x, 3.8, TK.z - TK.r - 0.01, 'z-', 'white', 'stencil')
@@ -513,6 +531,7 @@ async function WW_level(i) {
     t.cyl(dark, 0.12, 0.7, cx, y0 + 1.1, cz - 0.2, { seg: 10 })
     t.cyl(redM, 0.22, 0.05, cx, y0 + 1.46, cz - 0.2, { seg: 14 })
     t.col(cx - 1.8, y0, cz - 0.5, cx + 1.8, y0 + 0.9, cz + 0.5, 'metal')
+    kitCol(cx - 0.22, y0 + 0.9, cz - 0.42, cx + 0.22, y0 + 1.49, cz + 0.02) // the valve stem and its handwheel
   })
   // the catwalk across the basin, 2.6 m up, south of the tank, stairs down at both ends
   var CW = { z: 2.5, y: 2.6, x: 12 }
@@ -568,6 +587,7 @@ async function WW_level(i) {
   t.box(yellowM, 1.2, 0.6, 0.9, -6.6, GY - 1.0, -9.0, { bevel: 0.04 })
   t.rod(dark, [-6.6, GY - 1.3, -9.0], [-6.6, 3.0, -9.0], 0.02, { seg: 5 })
   t.box(dark, 0.3, 0.3, 0.3, -6.6, 2.85, -9.0)
+  kitShot(-6.8, 2.3, -9.2, -6.4, 3.0, -8.8) // the hook block (with the hook in the detail pass)
   label('DANGER — SLUDGE', 0.32, -10.6, 1.4, -15.78, 'z+', 'black', 'sans')
   label('DANGER — SLUDGE', 0.32, 10.6, 1.4, -15.78, 'z+', 'black', 'sans')
 
@@ -604,12 +624,14 @@ async function WW_level(i) {
     t.cyl(blueM, 0.24, 0.9, x + 0.95, 0.95, z + 0.75, { axis: 'z', seg: 12 })
     t.cyl(galv, 0.24, 3.0, x + 0.95, 2.95, z + 1.1, { seg: 14 })
     t.cyl(galv, 0.24, 3.8, x + 0.95, 4.3, z + 3.0, { axis: 'z', seg: 14 })
+    kitShot(x + 0.71, 4.06, z + 1.1, x + 1.19, 4.54, z + 4.9) // the riser's run to the header
     t.cyl(redM, 0.28, 0.06, x + 0.95, 2.1, z + 1.1, { seg: 14 })
     label('P-' + (k + 1), 0.4, x - 0.55, 1.15, z + 0.52, 'z+', 'white', 'stencil')
     t.col(x - 1.45, 0.3, z - 0.75, x + 1.6, 1.62, z + 0.75, 'metal')
     t.col(x + 0.7, 0.3, z + 0.75, x + 1.2, 4.55, z + 1.35, 'metal')
   })
   t.cyl(galv, 0.32, 35.4, 0, 4.3, 22.3, { axis: 'x', seg: 16 })
+  kitShot(-17.7, 3.98, 21.98, 17.7, 4.62, 22.62) // the header along the south wall
   for (var bx2 = -16; bx2 <= 16.01; bx2 += 4) t.box(dark, 0.12, 1.2, 0.9, bx2, 4.9, 22.55)
   // cabinets along the south wall, crates by the side doors
   ;[-1, 1].forEach(function (s) {
@@ -625,7 +647,8 @@ async function WW_level(i) {
   var hallInside = [{ min: V(-17.8, 0, 11.2), max: V(17.8, HH, 23) }]
 
   /* ==== DETAIL PASS ========================================================
-   * Everything below is visual (thin, close to the surfaces, no colliders):
+   * Everything below is visual (thin, close to the surfaces; the few pieces
+   * that stand proud get a kitCol / kitShot box beside their meshes):
    * board-formed concrete (panel joints, tie holes), moss and grime at the
    * wall feet, streaks under the copings, razor-wire fences on the perimeter,
    * sawcut floor joints, trench drains, oil stains, the clarifier's seams,
@@ -821,13 +844,16 @@ async function WW_level(i) {
   t.slab(galv, -24.9, 3.25, -16.64, 24.9, 3.42, -16.6)
   for (var cb = 0; cb < 4; cb++) t.cyl(cb % 2 ? dark : M('polymer_black'), 0.028, 49.6, 0, 3.33, -16.55 + cb * 0.075, { axis: 'x', seg: 6 })
   for (var tb = -24; tb <= 24; tb += 1.5) t.box(dark, 0.05, 0.3, 0.42, tb, 3.12, -16.41)
+  kitShot(-24.9, 2.97, -16.64, 24.9, 3.42, -16.2) // cable tray on its hangers
   ;[-1, 1].forEach(function (s) {
     // hose cabinet + fire point sign on the inner wall
     blk(redM, s * 4.0, 0.9, -16.42, s * 5.0, 1.9, -16.2, false, { bevel: 0.02 })
+    kitCol(s * 4.0, 0.9, -16.43, s * 5.0, 1.9, -16.2)
     t.slab(whiteM, Math.min(s * 4.1, s * 4.9), 1.65, -16.43, Math.max(s * 4.1, s * 4.9), 1.8, -16.42)
     label('FIRE HOSE', 0.12, s * 4.5, 1.72, -16.435, 'z-', 'red', 'sans')
     // handwheel valves on the pipe run
     for (var vx of [6, 18]) {
+      kitCol(s * vx - 0.22, 1.08, -22.67, s * vx + 0.22, 1.55, -22.23) // stem + wheel, above the pipe run's box
       t.cyl(dark, 0.06, 0.5, s * vx, 1.25, -22.45, { seg: 8 })
       try { t.add(new lt.TorusGeometry(0.2, 0.022, 6, 18).rotateX(Math.PI / 2), redM, { p: [s * vx, 1.52, -22.45] }) } catch (e) { }
       t.cyl(redM, 0.2, 0.02, s * vx, 1.52, -22.45, { seg: 18, open: true })
@@ -847,6 +873,9 @@ async function WW_level(i) {
     }
     t.box(dark, n[0] ? 0.012 : 0.5, 0.012, n[1] ? 0.012 : 0.5, x + n[0] * 0.22, y + 0.06, z + n[1] * 0.22)
     t.box(dark, n[0] ? 0.012 : 0.5, 0.012, n[1] ? 0.012 : 0.5, x + n[0] * 0.22, y - 0.1, z + n[1] * 0.22)
+    // every caged lamp hangs 3.6 m up or higher: bullets only
+    var ex = n[0] ? [x, x + n[0] * 0.23] : [x - 0.26, x + 0.26], ez = n[1] ? [z, z + n[1] * 0.23] : [z - 0.26, z + 0.26]
+    kitShot(Math.min(ex[0], ex[1]), y - 0.12, Math.min(ez[0], ez[1]), Math.max(ex[0], ex[1]), y + 0.11, Math.max(ez[0], ez[1]))
   }
   for (var lx4 = -21; lx4 <= 21.01; lx4 += 7) cagedLamp(lx4, 5.5, -23 + 0.0, 'z+')
   ;[-1, 1].forEach(function (s) {
@@ -869,6 +898,8 @@ async function WW_level(i) {
   ;[-1, 1].forEach(function (s) {
     // manway: flange, cover, bolt ring, davit arm
     var mx = TK.x + s * (TK.r + 0.07), my = 2.45
+    // chest high to someone on the plinth: solid (flange, cover, davit arm)
+    kitCol(Math.min(TK.x + s * 3.25, TK.x + s * 3.53), my - 0.55, TK.z - 0.46, Math.max(TK.x + s * 3.25, TK.x + s * 3.53), my + 0.6, TK.z + 0.53)
     t.cyl(greyM, 0.46, 0.16, mx, my, TK.z, { axis: 'x', seg: 24 })
     t.cyl(galv, 0.4, 0.06, mx + s * 0.1, my, TK.z, { axis: 'x', seg: 24 })
     for (var bb = 0; bb < 12; bb++) { var a3 = (bb / 12) * Math.PI * 2; t.cyl(boltM, 0.022, 0.05, mx + s * 0.14, my + Math.sin(a3) * 0.36, TK.z + Math.cos(a3) * 0.36, { axis: 'x', seg: 6 }) }
@@ -877,6 +908,13 @@ async function WW_level(i) {
     // nozzle with a flange and a valve, low on the shell toward the valve pits
     var aN = s * 0.75, nx = TK.x + Math.sin(aN) * TK.r, nz = TK.z + Math.cos(aN) * TK.r, ny = ty0 + 0.7
     var ox = Math.sin(aN), oz = Math.cos(aN)
+    // a diagonal pipe: three boxes along it (one box round all of it would
+    // stand 0.4 m wider than the pipe); the last one takes the valve on top
+    for (var ns = 0; ns < 3; ns++) {
+      var n0 = 0.95 * ns / 3, n1 = 0.95 * (ns + 1) / 3, nr = 0.22
+      kitCol(Math.min(nx + ox * n0, nx + ox * n1) - nr, ny - nr, Math.min(nz + oz * n0, nz + oz * n1) - nr,
+        Math.max(nx + ox * n0, nx + ox * n1) + nr, ns === 2 ? ny + 0.68 : ny + nr, Math.max(nz + oz * n0, nz + oz * n1) + nr)
+    }
     t.rod(greyM, [nx, ny, nz], [nx + ox * 0.6, ny, nz + oz * 0.6], 0.16, { seg: 12 })
     t.rod(dark, [nx + ox * 0.55, ny, nz + oz * 0.55], [nx + ox * 0.66, ny, nz + oz * 0.66], 0.24, { seg: 14 })
     t.rod(blueM, [nx + ox * 0.66, ny, nz + oz * 0.66], [nx + ox * 0.95, ny, nz + oz * 0.95], 0.2, { seg: 12 })
@@ -976,9 +1014,11 @@ async function WW_level(i) {
     t.rod(dark, [x + 1.2, 2.95, z + 1.1], [x + 1.12, 2.95, z + 1.1], 0.012, { seg: 4 })
     t.rod(dark, [x + 0.95, 3.2, z + 1.36], [x + 0.95, 3.2, z + 1.62], 0.03, { seg: 6 })
     try { t.add(new lt.TorusGeometry(0.22, 0.022, 6, 18), redM, { p: [x + 0.95, 3.2, z + 1.64] }) } catch (e) { }
-    // suction elbow into the floor
+    kitShot(x + 0.73, 2.98, z + 1.35, x + 1.17, 3.42, z + 1.67) // the handwheel off the riser
+    // suction elbow into the floor (knee high, past the pump's box)
     t.cyl(blueM, 0.24, 0.5, x + 0.95, 0.55, z - 0.75, { axis: 'z', seg: 12 })
     t.cyl(dark, 0.3, 0.06, x + 0.95, 0.55, z - 1.0, { axis: 'z', seg: 14 })
+    kitCol(x + 0.65, 0.25, z - 1.03, x + 1.25, 0.85, z - 0.75)
     // conduit from the motor to the cable tray
     t.rod(M('polymer_black'), [x - 0.6, 1.62, z + 0.25], [x - 0.6, 4.7, z + 0.25], 0.025, { seg: 6 })
     label('PUMP ' + (k + 1), 0.22, x - 0.6, 1.5, z + 0.41, 'z+', 'white', 'stencil')
@@ -1002,6 +1042,7 @@ async function WW_level(i) {
   // the roller shutter over the main door (rolled up) and its housing
   t.cyl(greyM, 0.28, 3.8, 0, 3.55, 10.55, { axis: 'x', seg: 14 })
   t.slab(greyM, -1.95, 3.25, 10.7, 1.95, 3.9, 10.8)
+  kitShot(-1.95, 3.25, 10.27, 1.95, 3.9, 10.8) // over the 3.2 m door: bullets only
   try { t.decal('hazard_general', 0.32, -2.4, 2.2, 10.785, 'z-') } catch (e) { }
 
   /* -- yards: more kit ---------------------------------------------------- */
@@ -1016,6 +1057,7 @@ async function WW_level(i) {
     // electrical box + conduit on the yard wall
     var wx2 = s < 0 ? -18.2 : 18.2, io2 = s < 0 ? -1 : 1
     faceBox('x', wx2, io2, -8.4, -7.6, 1.2, 2.2, 0.25, greyM)
+    kitCol(Math.min(wx2, wx2 + io2 * 0.25), 1.2, -8.4, Math.max(wx2, wx2 + io2 * 0.25), 2.2, -7.6)
     try { t.decal('hazard_voltage', 0.2, wx2 + io2 * 0.26, 1.95, -8.0, s < 0 ? 'x-' : 'x+') } catch (e) { }
     faceBox('x', wx2, io2, -8.05, -7.95, 2.2, 3.95, 0.06, M('polymer_black'))
   })
