@@ -14,6 +14,18 @@
 // hill assist: the share of the slope's pull the drive adds going uphill
 var SXC_HILL = 0.8
 
+// Driving view: first person from the driver's seat (the default) or the
+// chase camera; the crouch key (C) switches while driving, and the choice is
+// kept (doomzone.drivecam). The driver at the wheel: driver/driver.js.
+var SXC_VIEW = { fpv: true, fov: 80, look: 2.2 }
+try { if (localStorage.getItem('doomzone.drivecam') === 'chase') SXC_VIEW.fpv = false } catch (e) { }
+function SXC_toggleView() {
+  SXC_VIEW.fpv = !SXC_VIEW.fpv
+  try { localStorage.setItem('doomzone.drivecam', SXC_VIEW.fpv ? 'fpv' : 'chase') } catch (e) { }
+}
+function SXC_wrap(a) { return Math.atan2(Math.sin(a), Math.cos(a)) }
+function SXC_viewKey() { try { return typeof SXKB_label === 'function' ? SXKB_label('crouch') : 'C' } catch (e) { return 'C' } }
+
 var SXC_SPECS = {
   sandcat: {
     type: 'sandcat', label: 'Sandcat',
@@ -29,6 +41,9 @@ var SXC_SPECS = {
     box: { min: [-1.0, -0.35, -2.0], max: [1.0, 1.32, 1.8] },
     camDist: 6.6, camHeight: 1.5, fov: 72,
     runOver: { radius: 2.0, damage: 10, selfDamage: 6 },
+    // the Buggy model's single centre seat and its steering wheel (STIR), body
+    // frame (driver/driver.js)
+    cockpit: { hip: [0, 0.08, 0.36], wheel: [0, 0.4, -0.2], tilt: 0.78, r: 0.17, feet: [0.13, -0.3, -0.62], eye: [0, 0.9, 0.4], pitch: -0.16, ratio: 2.6 },
   },
   rhino: {
     type: 'rhino', label: 'Rhino',
@@ -42,6 +57,10 @@ var SXC_SPECS = {
     box: { min: [-1.32, -0.4, -3.1], max: [1.32, 1.65, 3.05] },
     camDist: 9.2, camHeight: 2.3, fov: 70,
     runOver: { radius: 2.8, damage: 14, selfDamage: 3 },
+    // the TMV's open cab, left seat (cushion y 0.45 at z -1.3..-0.85, dash top
+    // 0.96 at z -1.75..-1.45, footwell 0.2); the model has no steering wheel:
+    // driver/driver.js adds one
+    cockpit: { hip: [-0.5, 0.56, -0.92], wheel: [-0.5, 1.0, -1.36], tilt: 0.62, r: 0.2, feet: [0.14, 0.24, -1.68], eye: [-0.5, 1.34, -0.86], pitch: -0.08, ratio: 2.4 },
   },
 }
 
@@ -71,6 +90,7 @@ function SXC_engineGen(f0, diesel) {
   }
 }
 try { window.__sxEngineGen = SXC_engineGen } catch (e) { }
+try { window.__sxc = { BG: function () { return SXC_BG }, TMV: function () { return SXC_TMV }, SPECS: SXC_SPECS } } catch (e) { } // tests
 if (typeof Go !== 'undefined' && Go) {
   Go.sx_engine_buggy = { gen: SXC_engineGen(60, false), n: 1, sr: Xn, peak: 0.55, loop: 1, ref: 7, roll: 0.9 }
   Go.sx_engine_diesel = { gen: SXC_engineGen(30, true), n: 1, sr: Xn, peak: 0.6, loop: 1, ref: 9, roll: 0.8 }
@@ -292,7 +312,11 @@ function SXC_bgGeometry(scene) {
   var tyres = SXC_splitQuad(SXC_floatGeo(ban, frame), SXC_BGT.at[1])
   var hubs = rem ? SXC_splitQuad(SXC_floatGeo(rem, frame), SXC_BGT.at[1]) : null
   var box = new lt.Box3().setFromObject(frame)
-  return { tyres: tyres, hubs: hubs, tyreMat: ban.material, hubMat: rem && rem.material, box: box }
+  // the steering wheel (STIR) and the seats (KURSI), in the body frame: the
+  // driver sits on the -x seat (driver/driver.js)
+  var stir = find(/(^|[_\s])STIR($|[_\s])/), kursi = find(/(^|[_\s])KURSI($|[_\s])/)
+  var bbOf = function (m) { if (!m) return null; var g = SXC_floatGeo(m, frame); g.computeBoundingBox(); return g.boundingBox }
+  return { tyres: tyres, hubs: hubs, tyreMat: ban.material, hubMat: rem && rem.material, box: box, stir: bbOf(stir), kursi: bbOf(kursi), stirMesh: stir && stir.parent.name }
 }
 // the physics follows the model: wheel mounts, tyre radius, hull and box
 function SXC_bgSpec(geo) {
@@ -309,11 +333,15 @@ function SXC_buildSandcatGLB(G, M) {
   var body = new lt.Group()
   var hold = SXC_bgHold(SXC_BG.scene.clone(true))
   body.add(hold)
+  var steer = typeof SXDR_wheel === 'function' ? SXDR_wheel(M, SXC_SPECS.sandcat.cockpit) : null
   hold.traverse(function (o) {
     if (!o.isMesh) return
     if (o.parent && (SXC_BG_TYRE.test(o.parent.name) || SXC_BG_HUB.test(o.parent.name))) { o.visible = false; return }
+    // the modelled steering wheel can't turn: a separate one does (driver/driver.js)
+    if (steer && o.parent && /(^|[_\s])STIR($|[_\s])/.test(o.parent.name)) { o.visible = false; return }
     o.castShadow = true; o.receiveShadow = true
   })
+  if (steer) body.add(steer)
   var mk = function (part, mat) { var g = new lt.Group(), m = new lt.Mesh(part.geo, mat); m.castShadow = true; m.receiveShadow = true; g.add(m); return g }
   var wheels = geo.tyres.map(function (p) { return mk(p, geo.tyreMat) })
   // hubs ride the wheel holder (steer + suspension) at their offset from the tyre centre
@@ -323,7 +351,7 @@ function SXC_buildSandcatGLB(G, M) {
   tur.yaw.position.set(T.gun[0], T.gun[1], T.gun[2])
   var post = Ke([T.gun[0], 0.55, T.gun[2]], [T.gun[0], T.gun[1] - 0.04, T.gun[2]], 0.05, 8)
   if (post) { var pm = new lt.Mesh(post, M.steel); pm.castShadow = true; body.add(pm) }
-  return { glb: true, body: body, wheels: wheels, hubs: hubs, turret: tur }
+  return { glb: true, body: body, wheels: wheels, hubs: hubs, turret: tur, steer: steer }
 }
 
 function SXC_buildRhino(G, M) {
@@ -529,7 +557,10 @@ function SXC_buildRhinoGLB(G, M) {
   pitch.add(mk(P.gun))
   yaw.add(pitch)
   var tips = P.tips.map(function (t) { return t.clone() })
-  return { glb: true, body: body, wheels: wheels, turret: { yaw: yaw, pitch: pitch, muzzles: tips, rate: 1.7, pitchMin: -0.2, pitchMax: 0.6, z0: pitch.position.z } }
+  // the cab has no steering wheel of its own (driver/driver.js)
+  var steer = typeof SXDR_wheel === 'function' ? SXDR_wheel(M, SXC_SPECS.rhino.cockpit) : null
+  if (steer) body.add(steer)
+  return { glb: true, body: body, wheels: wheels, steer: steer, turret: { yaw: yaw, pitch: pitch, muzzles: tips, rate: 1.7, pitchMin: -0.2, pitchMax: 0.6, z0: pitch.position.z } }
 }
 
 // --------------------------------------------------------- the car itself
@@ -564,6 +595,8 @@ function SXC_vehicle(G, U, spec, opts, build) {
   var vel = new V3(), ang = new V3()
   var st = { steer: 0, sleep: 0, beachT: 0, hullTouch: false, asleep: false, flipT: 0, heat: 0, overheat: false, fireT: 0, shellT: 0, adsPrev: false, grounded: 0, speed: 0, fwdSpeed: 0, idleLookT: 0, lastLookYaw: 0, dustT: 0, engine: null, landV: 0, hitT: 0, bangT: 0, runT: new Map(), wreckT: 0, smokeT: 0 }
   var shells = []
+  var driver = null // the player at the wheel (driver/driver.js)
+  var fpvE = new lt.Euler(0, 0, 0, 'YXZ'), fpvQ = new Q()
   var fireFx = null
 
   // scratch
@@ -872,6 +905,38 @@ function SXC_vehicle(G, U, spec, opts, build) {
       w.holder.rotation.set(0, w.steers ? st.steer : 0, 0)
       w.tyre.rotation.x = -w.spin
     }
+    // the steering wheel turns with the steering; the player sits at it while
+    // driving (driver/driver.js: made the first time, once the soldier model is in)
+    var ck = spec.cockpit, sw = model.steer
+    var driving = U.pilot === api && api.alive
+    // online, another player driving this car (net/net.js pins it: __netPilot)
+    var netP = !driving && api.alive && api.__netPilot && typeof SXN !== 'undefined' && SXN.active && SXN.players ? SXN.players[api.__netPilot] : null
+    var steerNow = st.steer, lookRel = 0, lookP = 0, hyNow = headingYaw()
+    if (driving) { lookRel = SXC_wrap(U.look.yaw - hyNow); lookP = U.look.pitch }
+    else if (netP) {
+      // their steering, read off how fast the car turns at its speed (bicycle model)
+      var dyaw = st.netHy == null ? 0 : SXC_wrap(hyNow - st.netHy), mv = st.netPos ? Math.hypot(pos.x - st.netPos.x, pos.z - st.netPos.z) : 0
+      st.netHy = hyNow
+      st.netPos = (st.netPos || new V3()).copy(pos)
+      var base = Math.abs(spec.wheels[0][1] - spec.wheels[spec.wheels.length - 1][1]) || 2.6
+      var est = dt > 0 && mv > 0.02 ? Math.atan(((dyaw / dt) * base) / Math.max(2, mv / dt)) : 0
+      st.netSteer = (st.netSteer || 0) + (Math.max(-spec.steerMax, Math.min(spec.steerMax, est)) - (st.netSteer || 0)) * (1 - Math.exp(-8 * dt))
+      steerNow = st.netSteer
+      var ls = netP.buf && netP.buf[netP.buf.length - 1]
+      if (ls) { lookRel = SXC_wrap((ls.yaw || 0) - hyNow); lookP = ls.pitch || 0 }
+    } else st.netHy = null
+    if (sw) sw.userData.spin.rotation.z = steerNow * (ck ? ck.ratio : 2.5)
+    var seated = driving || !!netP
+    var look = driving ? (typeof SXDR_variant === 'function' ? SXDR_variant() : 'net_blue') : netP && netP.team === 'red' ? 'net_red' : 'net_blue'
+    if (driver && seated && driver.variant !== look) { driver.dispose(); driver = null } // someone else at the wheel
+    if (seated && !driver && sw && ck && typeof SXDR_make === 'function') {
+      driver = SXDR_make(G, ck, look)
+      if (driver) { driver.variant = look; bodyG.add(driver.root) }
+    }
+    if (driver) {
+      driver.show(seated && !!sw)
+      if (seated && sw) driver.pose(sw, sw.userData.spin.rotation.z, lookRel, lookP, driving && SXC_VIEW.fpv)
+    }
     // turret tracks the crosshair while piloted, rests forward otherwise
     var wantYaw = 0, wantPitch = 0.05
     if (aiming) {
@@ -1160,6 +1225,7 @@ function SXC_vehicle(G, U, spec, opts, build) {
       st.asleep = false
       st.lastLookYaw = U.look.yaw
       st.idleLookT = 0
+      st.fpvHy = null // the driver view starts looking ahead
       engineStart()
       U.sound('reload_bolt', { pos: pos, gain: 0.7, pitch: spec.mass > 2000 ? 0.45 : 0.6 })
     },
@@ -1172,6 +1238,11 @@ function SXC_vehicle(G, U, spec, opts, build) {
       var my = mv.y || 0, boost = !!inp.sprint && my > -0.1
       var ctl = { throttle: boost ? 1 : my, steer: -(mv.x || 0), handbrake: !!(inp.down && inp.down('jump')), boost: boost }
       if (inp.pressed && inp.pressed('reload')) { frame(); if ((up.y < 0.6 || st.grounded <= 2) && st.speed < 5) unflip() }
+      // C (the crouch key): first person ⇄ chase camera
+      if (inp.pressed && inp.pressed('crouch') && spec.cockpit) {
+        SXC_toggleView()
+        try { G.hud.message(SXC_VIEW.fpv ? 'Driver view' : 'Chase view', 1.2) } catch (e) { }
+      }
       simulate(dt, ctl)
       // auto-centre the camera behind the car when the mouse rests
       if (Math.abs(U.look.yaw - st.lastLookYaw) > 1e-4) st.idleLookT = 0
@@ -1204,8 +1275,29 @@ function SXC_vehicle(G, U, spec, opts, build) {
       st.adsPrev = ads
     },
     camera: function (cam, dt, U2) {
-      var focus = t1.copy(pos).setY(pos.y + spec.camHeight)
-      U.chaseCam(cam, focus, U.look.yaw, U.look.pitch, spec.camDist, dt, spec.fov)
+      var ck = spec.cockpit
+      if (SXC_VIEW.fpv && ck) {
+        // first person from the driver's seat: the car's own pitch and roll,
+        // the view carried round as the car turns, the mouse looks about
+        // within ±SXC_VIEW.look of straight ahead (the auto-centre in drive()
+        // brings it back when the mouse rests)
+        var hy = headingYaw()
+        // the first frame in this view: look straight ahead, a little down at the wheel
+        if (st.fpvHy == null) { st.fpvHy = hy; U.look.yaw = hy; U.look.pitch = ck.pitch || 0 }
+        U.look.yaw += SXC_wrap(hy - st.fpvHy)
+        st.fpvHy = hy
+        var off = Math.max(-SXC_VIEW.look, Math.min(SXC_VIEW.look, SXC_wrap(U.look.yaw - hy)))
+        U.look.yaw = hy + off
+        toWorld(t1.set(ck.eye[0], ck.eye[1], ck.eye[2]), cam.position)
+        fpvE.set(U.look.pitch, off, 0)
+        cam.quaternion.copy(q).multiply(fpvQ.setFromEuler(fpvE))
+        if (cam.fov !== SXC_VIEW.fov) { cam.fov = SXC_VIEW.fov; cam.updateProjectionMatrix() }
+        cam.updateMatrixWorld()
+      } else {
+        st.fpvHy = null
+        var focus = t1.copy(pos).setY(pos.y + spec.camHeight)
+        U.chaseCam(cam, focus, U.look.yaw, U.look.pitch, spec.camDist, dt, spec.fov)
+      }
       // what the crosshair is on, for the turret next frame
       var d = t2.set(0, 0, -1).applyQuaternion(cam.quaternion)
       var h = U.cast(cam.position, d, 500, 'enemy')
@@ -1218,6 +1310,7 @@ function SXC_vehicle(G, U, spec, opts, build) {
       if (spec.type === 'rhino') lines.push(st.shellT > 0 ? 'SHELL ' + st.shellT.toFixed(1) + 's' : 'SHELL READY (RMB)')
       frame()
       if (up.y < 0.6 || st.beachT > 0.8 || st.flipT > 0.5) lines.push('R  RESET CAR')
+      if (spec.cockpit) lines.push(SXC_viewKey() + '  ' + (SXC_VIEW.fpv ? 'CHASE VIEW' : 'DRIVER VIEW'))
       return { hp: api.hp, maxHp: api.maxHp, lines: lines }
     },
     // debug / tests

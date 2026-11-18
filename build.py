@@ -59,7 +59,7 @@ GAME = os.path.join(HERE, 'game')
 # index.html: the page a static host (GitHub Pages, Vercel, …) serves at the site root
 DIST = os.path.join(HERE, 'dist', 'index.html')
 COPY = os.path.join(HERE, '..', 'doomzone.html')
-FEATURES = ['common', 'desert', 'crossroads', 'waterworks', 'arsenal', 'units', 'walkers', 'aircraft', 'cars', 'jets',
+FEATURES = ['common', 'desert', 'crossroads', 'waterworks', 'arsenal', 'units', 'walkers', 'aircraft', 'cars', 'driver', 'jets',
             'outposts', 'troopers', 'minimap', 'menu', 'view', 'score', 'modes', 'stats', 'keys', 'offline', 'net', 'perf', 'shots', 'gunfx']
 SPLIT_AFTER = '10_game.js'  # the features go right after this slice of the game script
 ASSET_DIR = 'assets'  # beside the page, split build

@@ -9,7 +9,7 @@ Game bắn súng góc nhìn thứ nhất chạy trên trình duyệt, không c�
 - **Thống kê và 14 thành tích**, lưu ngay trên máy; đổi phím trong Settings
 - **Chơi offline và cài như app** (Settings → Offline play): map đã chơi mở được khi mất mạng
 - **Chơi nhiều người** (PeerJS): co-op, Sinh tồn chơi chung, đấu đội Blue vs Red tính theo ván, free-for-all
-- **Súng và đồ:** súng trường, súng lục, shotgun, súng tỉa, phụ kiện, giáp, balo; lái xe, mech, trực thăng, máy bay
+- **Súng và đồ:** súng trường, súng lục, shotgun, súng tỉa, phụ kiện, giáp, balo; lái xe (nhìn từ ghế lái hoặc từ sau xe, phím C), mech, trực thăng, máy bay
 
 ## Điều khiển
 

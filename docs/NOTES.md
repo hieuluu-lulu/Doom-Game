@@ -621,6 +621,20 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 - **Kích thước:** phóng ×1,29 để chiều dài, khoảng cách trục và cỡ bánh khớp xe cũ. Hộp va chạm giữ nguyên, tốc độ lái giống hệt (test: 25 km/h sau 3 giây, 33 km/h sau 5 giây, như cũ).
 - **Dự phòng:** model tải muộn thì xe tạm dùng hình cũ rồi tự đổi.
 
+### Người lái và góc nhìn lái xe (`driver/`, `cars/cars.js`)
+
+- **Góc nhìn:** lái Sandcat hoặc Rhino mặc định nhìn từ ghế lái (góc thứ nhất). Phím ngồi (C, đổi được trong Controls) chuyển sang camera bám sau xe (góc thứ ba) và ngược lại; lựa chọn được nhớ (`localStorage` khoá `doomzone.drivecam`). HUD của xe ghi phím đó ("C  CHASE VIEW" / "C  DRIVER VIEW").
+  - Góc thứ nhất: camera ở mắt người lái (`cockpit.eye`), nghiêng và lắc theo thân xe, quay theo xe khi xe rẽ. Chuột nhìn quanh được ±126° so với phía trước (`SXC_VIEW.look`); thả chuột khi đang chạy thì góc nhìn tự về phía trước (dùng chung đoạn tự căn của camera bám xe). Lúc vào xe nhìn thẳng, hơi cúi để thấy vô lăng (`cockpit.pitch`). FOV 80°.
+  - Súng trên xe vẫn ngắm theo tâm màn hình ở cả hai góc nhìn (`aimPt` lấy từ tia của camera).
+  - Trực thăng, máy bay, mech: vẫn chỉ góc thứ ba.
+- **Người lái** (`SXDR_make` trong `driver/driver.js`): dùng model lính (`troopers/lib/20_soldier.js`), màu đội khi chơi mạng (xanh khi chơi một mình). Hông đặt trên ghế, chân co lên đạp bàn đạp, hai tay nắm vành vô lăng ở vị trí 10 giờ – 2 giờ và xoay theo vô lăng (IK hai khớp `SXT_ik` cho tay và chân), người hơi ngả ra sau, đầu quay theo hướng nhìn (tối đa ±69° ngang, ±40° dọc). Ở góc thứ nhất đầu được thu nhỏ lại (camera nằm trong đó), nên vẫn thấy tay, vai và bóng của người lái.
+- **Vô lăng** (`SXDR_wheel`): vành, 3 nan, trục và cột lái, quay theo góc đánh lái nhân `cockpit.ratio` (Sandcat 2,6; Rhino 2,4). Sandcat ẩn vô lăng có sẵn trong model (phần `STIR`, không xoay được) và dùng cái này; model TMV của Rhino không có vô lăng nên được thêm vào.
+- **Vị trí trong xe** (`cockpit` trong `SXC_SPECS`, hệ toạ độ thân xe):
+  - Sandcat: model Buggy chỉ có một ghế ở giữa (`KURSI`), vô lăng ở `x = 0`, cao 0,4 m, nghiêng 45°.
+  - Rhino: khoang mui trần, ghế trái. Đo bằng tia chiếu dọc thân model: đệm ghế cao 0,45 m (z −1,3 đến −0,85), táp lô 0,96 m (z −1,75 đến −1,45), sàn để chân 0,2 m.
+- **Chơi mạng:** người khác lái xe thì máy mình cũng thấy họ ngồi sau vô lăng (`__netPilot` do `net/net.js` đặt; avatar của họ vốn đã ẩn khi ở trong xe). Góc vô lăng của họ được ước lượng từ tốc độ xoay của xe (mô hình xe đạp: góc lái ≈ atan(tốc độ xoay × chiều dài cơ sở / vận tốc)).
+- **Đã thử:** ảnh chụp từ góc thứ nhất và từ 4 phía ở góc thứ ba cho cả hai xe: người lái ngồi đúng ghế, tay trên vành, vô lăng xoay khi đánh lái; phím C đổi góc nhìn và được nhớ; xuống xe thì FOV trở lại; 2 trình duyệt qua PeerJS (map sa mạc): host lái Sandcat, máy kia thấy người lái trên xe.
+
 ### Máy bay phản lực (`jets/`, chỉ map sa mạc)
 
 - **Model của Talon: Su-57**
