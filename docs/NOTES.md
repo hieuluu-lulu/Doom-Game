@@ -494,7 +494,21 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - **Minimap** phủ cả map (`SXD_WORLD_R`, ảnh 2048 px, khoảng 1,5 m/điểm ảnh, lưới vạch 500 m). Ngoài lưới tạo sẵn, độ cao lấy thưa mỗi 4 điểm ảnh rồi nội suy (vẽ mất khoảng 0,3 s lúc tải). Mở bản đồ lớn thì phóng sẵn 3,5×, phóng tối đa 30×.
   - **Đã thử:** đứng ở cách trạm 1,2 km thì đứng đúng trên mặt đất, 108 ô được dựng (15 ô 2 m), vòng chi tiết phủ đủ 552 m, 60 FPS; nhìn 4 hướng không có lỗ hay đường nối. Lái Sandcat (bật tăng tốc) ra mép: dừng ở 1,48 km rồi bị đẩy lại.
 - **Đường lên núi** (`SXD_mesaRamps`, `SXD_rampLift`): mỗi núi mesa có một con dốc đắp thẳng từ mặt đất lên mặt đỉnh, dốc 0,32 (khoảng 18°), mặt dốc rộng 8 m, hai bên đổ xuống 1,5 m mỗi mét và phía đỉnh cũng đổ xuống, nên con dốc luôn gặp mặt đất, không thành bức tường. Hướng dốc chọn một lần trong 36 hướng: tránh khu căn cứ, các núi khác, các cứ điểm và đường cao tốc, rồi ưu tiên hướng nhìn về căn cứ. Cả 8 con dốc đều tìm được hướng không vướng gì. Con dốc nằm trong `SXD_terrainHeight`, nên va chạm, hiển thị, minimap và vòng thô đều thấy giống nhau.
-  - **Đã thử:** lái tự động (bám trục con dốc) lên núi phía tây (cao 72 m): Sandcat lên tới đỉnh sau khoảng 12 giây, Rhino khoảng 17 giây.
+  - **Đã thử:** lái tự động (bám trục con dốc) lên núi phía tây (cao 72 m): Sandcat lên tới đỉnh sau khoảng 12 giây, Rhino khoảng 17 giây. Sau khi đổi hình núi (mục dưới), Sandcat vẫn lên tới đỉnh.
+- **Hình núi** (`SXD_mesaH`, chỉnh ở `SXD_MESA_TUNE`; nằm trong `SXD_terrainHeight`, nên va chạm, minimap và vòng thô khớp theo):
+  - Mặt đỉnh phẳng tới mép (viền fbm như cũ). Mỗi núi có 4 khe xói khía vào mép đỉnh (sâu 9–22 m, rộng 10–22 m), không có khe nào trong khoảng ±31° quanh hướng con dốc.
+  - Vách: trong 40 m (±20 %) hạ 62 % độ cao qua 3–5 tầng. Mỗi tầng một vách dốc (70 % bề rộng tầng) rồi một gờ thoải đọng cát; 70 % độ hạ nằm ở các bậc, 30 % là dốc đều. Mép các gờ uốn ra vào quanh núi.
+  - Bậc sắc hơn (vách hẹp hơn ô lưới 2 m) từng được thử: viền cong bị bậc thang thành hàng răng cưa / nếp gấp chữ V, nhất là ở mặt khuất nắng. Vì vậy gờ đá nhỏ là việc của shader.
+  - Chân núi: lớp đá vụn gồ ghề (fbm 7 m, cao tới 2,6 m) trên dải dốc 100 m.
+  - Tạo lưới độ cao lúc tải map mất khoảng 0,62 s (trước 0,39 s).
+- **Shader đá** (`SXD_TERRAIN_BODY`, dùng cho khối gần, ô sinh thêm và vòng thô):
+  - Các tầng đá cách nhau khoảng 4,8 m, uốn nhẹ, mỗi tầng một màu (kem, cá hồi, gỉ sắt, nâu sô-cô-la, trắng ngà), dày mỏng khác nhau, có vạch mảnh bên trong.
+  - Vệt sẫm (desert varnish) chảy dọc từ mỗi gờ xuống, khe nứt dọc thẳng; cả hai chỉ có trên vách dốc, không có trên gờ.
+  - Hốc tối dưới mỗi tầng và trong khe nứt.
+  - **Bump bằng đạo hàm màn hình** (cách của Mikkelsen, không cần texture): mỗi tầng phồng ra với chân lõm vào, khe nứt khoét sâu, mặt đá sần. Độ nghiêng của bump tối đa khoảng 40° (cạnh lưới sắc từng làm lóe đốm trắng), mờ dần từ 60 m tới 220 m.
+  - Nhiễu chiếu lên hai mặt phẳng X và Z rồi trộn theo hướng vách (`sdFace`), nên không bị nhoè ở chỗ vách đổi hướng. Lớp sần nhỏ mờ dần ở xa (trước đó lấp lánh thành lưới ô vuông).
+  - Đá bớt bóng (độ nhám 0,9).
+  - Đã thử: chụp 5 góc trước và sau ở chất lượng High (núi phía tây và phía đông, gần, xa, trên đỉnh, ngược nắng).
 - **Bóng mặt trời:** khi ra xa trạm, vùng đổ bóng đi theo người chơi.
 - **Địch:** robot chó vẫn tìm đường trong khu trạm. Drone thì bay theo người chơi.
 - **Quốc lộ (`SXD_ROAD_PTS`):**
@@ -600,6 +614,14 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 - **Hỗ trợ leo dốc** (`SXC_HILL` = 0,8 trong `cars/cars.js`): khi ga mà mũi xe đang chúc lên, lực kéo cộng thêm 80 % thành phần trọng lực kéo xe tụt xuống (như gài số thấp), vẫn bị giới hạn bởi độ bám của lốp. Nhờ vậy Rhino giữ W cũng leo được đồi cát và con dốc lên núi, không chỉ khi bật tăng tốc.
 - **Mép map:** xe bị chặn ở `SXD_PLAY_R` − 6 m (giờ 1494 m quanh tâm map sa mạc; trước đây 554 m). Mặt đất có tới `SXD_WORLD_R` = 1560 m, nên xe không bao giờ ra tới chỗ không có đất.
 - Chỉnh: `boostMul` (tốc độ tối đa) và `boostAccel` (lực kéo) trong `SXC_SPECS`.
+- **Tên lửa ở đuôi khi tăng tốc** (`cars/lib/30_boost.js`, vị trí `boost.nozzles` trong `SXC_SPECS`): mỗi xe có 2 ống phụt (vỏ thép tối, miệng loe cháy sém) gắn ở đuôi, lúc nào cũng thấy. Giữ Shift thì:
+  - **Lửa:** lõi vàng trắng, vỏ cam, vệt mờ dài màu đỏ cam, 3 "vòng sáng" (shock diamond) dọc lõi; màu HDR nên bloom làm chúng phát sáng. Lửa nhấp nháy, dài ra theo mức đốt và theo tốc độ xe. Miệng ống đỏ rực.
+  - **Ánh sáng:** đèn chớp cam từ bộ đèn chung của game (`render.lightPool.flash`, không thêm đèn mới nên không phải biên dịch lại shader) hắt xuống đất phía sau xe.
+  - **Khói và tia lửa:** khói xám ở đuôi luồng lửa mỗi 0,05 s, thỉnh thoảng có tia lửa bắn theo hướng luồng lửa.
+  - **Âm thanh:** tiếng gầm tên lửa lặp (`Go.sx_rocket`: tiếng gầm trầm + rền + xì + tiếng lách tách), to dần và nhỏ dần theo mức đốt.
+  - **Camera:** góc nhìn rộng thêm 8° (camera sau xe) hoặc 9° (ghế lái), ghế lái rung nhẹ.
+  - Mức đốt `st.boostK` lên nhanh (9/s) xuống chậm hơn (5/s). Xe người khác lái (chơi mạng): bật lửa khi xe chạy nhanh hơn tốc độ tối đa thường 4 % (chỉ tăng tốc mới vượt được).
+  - **Đã thử:** Sandcat và Rhino giữ Shift thì chỉ 2 ống của xe đang lái bật lửa (2/8 ống trong cảnh), nhả ra thì tắt hết (0/8); ảnh từ sau, bên hông và ghế lái.
 
 ### Xe Sandcat: model Buggy_2
 

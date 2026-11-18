@@ -44,6 +44,8 @@ var SXC_SPECS = {
     // the Buggy model's single centre seat and its steering wheel (STIR), body
     // frame (driver/driver.js)
     cockpit: { hip: [0, 0.08, 0.36], wheel: [0, 0.4, -0.2], tilt: 0.78, r: 0.17, feet: [0.13, -0.3, -0.62], eye: [0, 0.9, 0.4], pitch: -0.16, ratio: 2.6 },
+    // boost rockets on the tail [x, y, z, r] (cars/lib/30_boost.js)
+    boost: { nozzles: [[-0.4, 0.42, 2.2, 0.11], [0.4, 0.42, 2.2, 0.11]] },
   },
   rhino: {
     type: 'rhino', label: 'Rhino',
@@ -61,6 +63,7 @@ var SXC_SPECS = {
     // 0.96 at z -1.75..-1.45, footwell 0.2); the model has no steering wheel:
     // driver/driver.js adds one
     cockpit: { hip: [-0.5, 0.56, -0.92], wheel: [-0.5, 1.0, -1.36], tilt: 0.62, r: 0.2, feet: [0.14, 0.24, -1.68], eye: [-0.5, 1.34, -0.86], pitch: -0.08, ratio: 2.4 },
+    boost: { nozzles: [[-0.62, 0.5, 3.12, 0.15], [0.62, 0.5, 3.12, 0.15]] },
   },
 }
 
@@ -596,6 +599,9 @@ function SXC_vehicle(G, U, spec, opts, build) {
   var st = { steer: 0, sleep: 0, beachT: 0, hullTouch: false, asleep: false, flipT: 0, heat: 0, overheat: false, fireT: 0, shellT: 0, adsPrev: false, grounded: 0, speed: 0, fwdSpeed: 0, idleLookT: 0, lastLookYaw: 0, dustT: 0, engine: null, landV: 0, hitT: 0, bangT: 0, runT: new Map(), wreckT: 0, smokeT: 0 }
   var shells = []
   var driver = null // the player at the wheel (driver/driver.js)
+  // the boost rockets on the tail (cars/lib/30_boost.js); st.boostK 0..1 is the burn
+  var rockets = typeof SXC_boostRig === 'function' ? SXC_boostRig(G, spec) : null
+  if (rockets) bodyG.add(rockets.root)
   var fpvE = new lt.Euler(0, 0, 0, 'YXZ'), fpvQ = new Q()
   var fireFx = null
 
@@ -937,6 +943,14 @@ function SXC_vehicle(G, U, spec, opts, build) {
       driver.show(seated && !!sw)
       if (seated && sw) driver.pose(sw, sw.userData.spin.rotation.z, lookRel, lookP, driving && SXC_VIEW.fpv)
     }
+    // boost rockets: the driver's Shift here (drive() sets st.boostWant); another
+    // player's car burns while it runs past the normal top speed
+    if (netP) st.boostWant = dt > 0 && mv / dt > spec.topSpeed * 1.04
+    else if (!driving) st.boostWant = false
+    var bw = st.boostWant && api.alive ? 1 : 0
+    st.boostK = (st.boostK || 0) + (bw - (st.boostK || 0)) * (1 - Math.exp(-(bw > (st.boostK || 0) ? 9 : 5) * dt))
+    if (st.boostK < 0.005) st.boostK = 0
+    if (rockets) rockets.set(st.boostK, dt, pos, Math.abs(st.fwdSpeed || 0))
     // turret tracks the crosshair while piloted, rests forward otherwise
     var wantYaw = 0, wantPitch = 0.05
     if (aiming) {
@@ -1186,6 +1200,7 @@ function SXC_vehicle(G, U, spec, opts, build) {
     },
     dispose: function () {
       engineStop()
+      if (rockets) rockets.dispose()
       if (fireFx && fireFx.stop) { try { fireFx.stop() } catch (e) { } }
       shells.forEach(function (s) { G.scene.remove(s.mesh) })
       shells.length = 0
@@ -1237,6 +1252,7 @@ function SXC_vehicle(G, U, spec, opts, build) {
       // Shift alone drives forward at full boost (no W needed); S still brakes / reverses
       var my = mv.y || 0, boost = !!inp.sprint && my > -0.1
       var ctl = { throttle: boost ? 1 : my, steer: -(mv.x || 0), handbrake: !!(inp.down && inp.down('jump')), boost: boost }
+      st.boostWant = boost && api.alive
       if (inp.pressed && inp.pressed('reload')) { frame(); if ((up.y < 0.6 || st.grounded <= 2) && st.speed < 5) unflip() }
       // C (the crouch key): first person ⇄ chase camera
       if (inp.pressed && inp.pressed('crouch') && spec.cockpit) {
@@ -1289,14 +1305,16 @@ function SXC_vehicle(G, U, spec, opts, build) {
         var off = Math.max(-SXC_VIEW.look, Math.min(SXC_VIEW.look, SXC_wrap(U.look.yaw - hy)))
         U.look.yaw = hy + off
         toWorld(t1.set(ck.eye[0], ck.eye[1], ck.eye[2]), cam.position)
-        fpvE.set(U.look.pitch, off, 0)
+        var bk = st.boostK || 0, shake = bk * 0.0045
+        fpvE.set(U.look.pitch + (Math.random() - 0.5) * shake, off + (Math.random() - 0.5) * shake, 0)
         cam.quaternion.copy(q).multiply(fpvQ.setFromEuler(fpvE))
-        if (cam.fov !== SXC_VIEW.fov) { cam.fov = SXC_VIEW.fov; cam.updateProjectionMatrix() }
+        var fv = SXC_VIEW.fov + bk * 9 // the rockets widen the view
+        if (Math.abs(cam.fov - fv) > 0.01) { cam.fov = fv; cam.updateProjectionMatrix() }
         cam.updateMatrixWorld()
       } else {
         st.fpvHy = null
         var focus = t1.copy(pos).setY(pos.y + spec.camHeight)
-        U.chaseCam(cam, focus, U.look.yaw, U.look.pitch, spec.camDist, dt, spec.fov)
+        U.chaseCam(cam, focus, U.look.yaw, U.look.pitch, spec.camDist, dt, spec.fov + (st.boostK || 0) * 8)
       }
       // what the crosshair is on, for the turret next frame
       var d = t2.set(0, 0, -1).applyQuaternion(cam.quaternion)

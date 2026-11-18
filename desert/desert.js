@@ -1283,8 +1283,14 @@ async function SXD_ground(i) {
 var SXD_TERRAIN_HEAD = `
 varying vec3 vSdW; varying vec3 vSdN;
 uniform vec3 uSdHazeA, uSdHazeB, uSdSun;
-float sdRoughT; vec2 sdNxzT;
+float sdRoughT; vec2 sdNxzT; vec3 sdRockN; float sdRockW;
 ${SXD_SAND_COMMON}
+// value noise on a cliff face: projected on the x and z planes (the face's
+// horizontal axis) and blended by how the face is turned, so no smear where
+// it bends; k = (horizontal, vertical) frequency
+float sdFace(vec3 p, float yv, float wx, vec2 k){
+  return mix(sdVN(vec2(p.x * k.x, yv * k.y)), sdVN(vec2(p.z * k.x + 17.3, yv * k.y)), wx);
+}
 `
 
 var SXD_TERRAIN_BODY = `
@@ -1296,20 +1302,51 @@ var SXD_TERRAIN_BODY = `
   vec2 nxz;
   float grain = sdVN(xz * 23.0) * 0.5 + sdVN(xz * 61.0) * 0.5;
   vec3 sand = sdSand(xz, grain, sdVN(xz * 0.9), 0.9 * (1.0 - smoothstep(0.25, 0.5, slope)), dist, nxz);
-  // banded sandstone on the steep faces (mesas, cut banks)
-  float y = vSdW.y + (sdVN(xz * 0.08) - 0.5) * 3.0;
-  float band = fract(y * 0.16);
-  float bid = floor(y * 0.16);
-  vec3 rA = vec3(0.50, 0.29, 0.17), rB = vec3(0.62, 0.40, 0.25), rC = vec3(0.70, 0.52, 0.36);
-  vec3 rock = mix(rA, rB, sdH1(vec2(bid, 3.0)));
-  rock = mix(rock, rC, smoothstep(0.75, 1.0, sdH1(vec2(bid, 7.0))) * 0.7);
-  rock *= 0.8 + 0.3 * smoothstep(0.0, 0.15, band) * smoothstep(1.0, 0.8, band);
-  float varn = smoothstep(0.5, 0.8, sdVN(vec2(xz.x * 0.4 + xz.y * 0.4, y * 0.05)));
-  rock = mix(rock, rock * vec3(0.5, 0.4, 0.33), varn * 0.5);
+  // ---- sandstone on the steep faces (mesa cliffs, cut banks) ----
+  // strata ~4.8 m apart, gently warped, each its own colour (cream, salmon,
+  // rust, chocolate, pale) with thin bands inside
+  float yw = vSdW.y + (sdVN(xz * 0.035) - 0.5) * 5.0 + (sdVN(xz * 0.12) - 0.5) * 1.2;
+  float yl = yw * 0.21, bid = floor(yl), fb = fract(yl);
+  float thick = 0.55 + 0.9 * sdH1(vec2(bid, 11.0));
+  float pick = sdH1(vec2(bid, 3.0));
+  vec3 rock = pick < 0.25 ? vec3(0.78, 0.60, 0.42) : pick < 0.5 ? vec3(0.72, 0.44, 0.28) : pick < 0.72 ? vec3(0.60, 0.31, 0.18) : pick < 0.86 ? vec3(0.44, 0.25, 0.15) : vec3(0.86, 0.72, 0.54);
+  float sub = fract(yl * 3.0 + sdVN(xz * 0.5) * 0.3);
+  rock *= 0.92 + 0.12 * smoothstep(0.2, 0.5, sub) * (1.0 - smoothstep(0.6, 0.9, sub));
+  vec3 aw = abs(wn);
+  float wx = aw.x / (aw.x + aw.z + 1e-4);
+  // desert varnish: dark streaks running down the face from each ledge
+  float st = sdFace(vSdW, yw, wx, vec2(0.55, 0.035)) * 0.65 + sdFace(vSdW, yw, wx, vec2(1.7, 0.08)) * 0.35;
+  float steep = smoothstep(0.45, 0.75, slope); // varnish and joints on the cliffs, not the benches
+  float varn = smoothstep(0.55, 0.85, st) * (0.45 + 0.55 * smoothstep(0.9, 0.2, fb)) * steep;
+  rock = mix(rock, rock * vec3(0.36, 0.27, 0.21), varn * 0.75);
+  // joints: near-vertical fractures (straight up: low vertical frequency)
+  float jn = sdFace(vSdW, yw, wx, vec2(0.9, 0.012));
+  float joint = (1.0 - smoothstep(0.0, 0.03 + fwidth(jn) * 1.5, abs(jn - 0.5))) * steep;
+  // relief (m) for the bump: each layer bulges with its base undercut, the
+  // joints cut in, a rough grain over all
+  // (the fine grain fades out with distance: it shimmered into a grid far off)
+  float rough = mix(sdFace(vSdW, yw, wx, vec2(1.3, 1.3)) * 0.6 + sdFace(vSdW, yw, wx, vec2(4.1, 4.1)) * 0.4, 0.5, smoothstep(35.0, 140.0, dist));
+  float ledge = smoothstep(0.0, 0.08, fb) * (1.0 - smoothstep(0.86, 1.0, fb));
+  float relief = ledge * 0.35 * thick + rough * 0.18 - joint * 0.25;
+  // shade in the undercuts and the joints
+  rock *= 1.0 - ((1.0 - smoothstep(0.0, 0.1, fb)) * 0.5 + joint * 0.55) * 0.45;
+  rock *= 0.9 + 0.2 * rough;
   float rk = smoothstep(0.32, 0.55, slope + (sdVN(xz * 0.3) - 0.5) * 0.2);
+  // bump from the relief (screen-space derivatives, Mikkelsen), rock only,
+  // fading out with distance; the derivatives are taken on every fragment
+  vec3 dpx = dFdx(vSdW), dpy = dFdy(vSdW);
+  float dhx = dFdx(relief), dhy = dFdy(relief);
+  vec3 r1 = cross(dpy, wn), r2 = cross(wn, dpx);
+  float det = dot(dpx, r1);
+  vec3 bg = sign(det) * (dhx * r1 + dhy * r2);
+  float bl = length(bg), bm = abs(det) * 0.85; // no steeper than ~40° off the face (sharp mesh edges spiked it)
+  if (bl > bm) bg *= bm / bl;
+  vec3 bn = abs(det) * wn - bg;
+  sdRockN = dot(bn, bn) > 1e-14 ? normalize(bn) : wn;
+  sdRockW = rk * (1.0 - smoothstep(60.0, 220.0, dist));
   vec3 alb = mix(sand, rock, rk);
   diffuseColor.rgb *= alb;
-  sdRoughT = mix(0.95, 0.85, rk);
+  sdRoughT = mix(0.95, 0.9, rk);
   sdNxzT = nxz * (1.0 - rk) * (1.0 - smoothstep(25.0, 80.0, dist));
 }
 `
@@ -1398,6 +1435,46 @@ function SXD_rampLift(x, z, h) {
   return h
 }
 
+// One mesa's height at distance d / angle a from its centre:
+//  * the caprock: flat out to `edge` (an fbm outline, as before), with a few
+//    erosion gullies notched into the rim (none near the mesa's track)
+//  * the cliff: over cliffW m it drops `drop` of the height in 3-5 layers,
+//    each a steep riser (the first `riser` of the layer) then a sloping
+//    bench where sand collects (`stepped` of the drop in the steps, the rest
+//    an even slope); the benches wobble in and out round the mesa. Knife-
+//    edged steps narrower than the 2 m height grid came out as a sawtooth of
+//    pleats along the curved rim, so the fine ledges are the shader's
+//  * the talus: from the cliff foot down to the plain over talusLen m,
+//    strewn with rubble (`scree` m of fbm bumps)
+var SXD_MESA_TUNE = { cliffW: 40, drop: 0.62, riser: 0.7, stepped: 0.7, gullies: 4, talusLen: 100, scree: 2.6 }
+function SXD_angDist(a, b) { var d = Math.abs(a - b) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d }
+function SXD_mesaH(k, m, d, a, x, z) {
+  var T = SXD_MESA_TUNE, top = m[3]
+  var edge = m[2] * (1 + (SXD_fbm2(a * 2.2 + k * 3.3, k * 1.7, 4) - 0.5) * 0.55)
+  var R = SXD_RAMPS && SXD_RAMPS[k], ra = R ? Math.atan2(R.az, R.ax) : null
+  for (var j = 0; j < T.gullies; j++) {
+    var ga = SXD_h(k, j, 1.3) * Math.PI * 2
+    if (ra != null && SXD_angDist(ga, ra) < 0.55) continue
+    var hw = (5 + 6 * SXD_h(k, j, 2.7)) / m[2] // half width, in rad of the rim
+    var ad = SXD_angDist(a, ga)
+    if (ad < hw) edge -= (1 - ad / hw) * (9 + 13 * SXD_h(k, j, 4.1))
+  }
+  if (d <= edge) return top
+  var W = T.cliffW * (0.8 + 0.4 * SXD_fbm2(a * 1.7 + k, 3.1, 2))
+  var t = (d - edge) / W + (SXD_fbm2(a * 7 + k * 2, d * 0.05, 2) - 0.5) * 0.18
+  var lowTop = top * (1 - T.drop), cliff = 0
+  if (t < 1) {
+    var N = 3 + (k % 3), tc = Math.max(0, t), lay = tc * N, li = Math.floor(lay), lf = lay - li
+    var rs = T.riser * (0.8 + 0.4 * SXD_h(k, li, 7.7))
+    // `stepped` of the drop in the layers, the rest an even slope (no knife-edged benches)
+    var sd = ((li + SXD_smooth(0, rs, lf)) / N) * T.stepped + tc * (1 - T.stepped)
+    cliff = top * (1 - T.drop * sd)
+  }
+  var talus = lowTop * (1 - SXD_smooth(edge + W, edge + W + T.talusLen, d))
+  if (talus > 0.3) talus += (SXD_fbm2(x / 7 + k, z / 7 - k, 3) - 0.5) * T.scree * Math.min(1, (talus / lowTop) * 2)
+  return Math.max(cliff, talus)
+}
+
 function SXD_terrainBase(x, z) {
   var u = SXD_basinSd(x, z)
   if (u <= 0) return 0
@@ -1417,21 +1494,13 @@ function SXD_terrainBase(x, z) {
   var amp = 1.2 + 15 * SXD_smooth(14, 240, u)
   var dunes = amp * (ridge * 0.85 + SXD_fbm2(x / 70, z / 70, 3) * 0.4) * SXD_smooth(5, 16, u)
   var h = (berm + dunes) * (1 - cut * 0.93)
-  // mesas: flat caprock, steep stepped cliff, talus apron
+  // mesas: flat caprock, layered cliff, gullies, rubbly talus (SXD_mesaH)
+  SXD_mesaRamps() // their tracks keep the gullies away
   for (var k = 0; k < SXD_MESAS.length; k++) {
     var m = SXD_MESAS[k], dx = x - m[0], dz = z - m[1]
     var d = Math.hypot(dx, dz)
-    if (d > m[2] + 200) continue
-    var a = Math.atan2(dz, dx)
-    var edge = m[2] * (1 + (SXD_fbm2(a * 2.2 + k * 3.3, k * 1.7, 4) - 0.5) * 0.55)
-    var top = m[3] * (1 - SXD_smooth(edge, edge + 26, d))
-    var talus = m[3] * 0.38 * (1 - SXD_smooth(edge + 20, edge + 120, d))
-    var mh = Math.max(top, talus)
-    if (top > 0 && top < m[3]) {
-      var stp = m[3] / 5, f = mh / stp, fi = Math.floor(f)
-      mh = (fi + SXD_smooth(0.55, 1.0, f - fi)) * stp * 0.6 + mh * 0.4
-    }
-    h = Math.max(h, mh)
+    if (d > m[2] + 230) continue
+    h = Math.max(h, SXD_mesaH(k, m, d, Math.atan2(dz, dx), x, z))
   }
   // a dirt track up each mesa, so vehicles can drive onto the caprock
   h = SXD_rampLift(x, z, h)
@@ -2133,11 +2202,12 @@ async function SXD_backdrop(i) {
       .replace('#include <common>', '#include <common>\n' + SXD_TERRAIN_HEAD)
       .replace('#include <map_fragment>', SXD_TERRAIN_BODY)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = sdRoughT;')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize(normal + mat3(viewMatrix) * vec3(-sdNxzT.x, 0.0, -sdNxzT.y));')
+      // sand ripples (xz nudge), then the rock relief bump on the cliffs (world normal → view)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize(normal + mat3(viewMatrix) * vec3(-sdNxzT.x, 0.0, -sdNxzT.y));\n  normal = normalize(mix(normal, normalize(mat3(viewMatrix) * sdRockN), sdRockW));')
       .replace('#include <fog_fragment>', '#include <fog_fragment>\n' + SXD_TERRAIN_HAZE)
   }
   mat.customProgramCacheKey = function () {
-    return 'sxd-terrain-1'
+    return 'sxd-terrain-2'
   }
   // the coarse far mesh: the same look, but cut away (discard) inside the
   // circle the streamed 2 m tiles fully cover round the camera (SXD_streamer
