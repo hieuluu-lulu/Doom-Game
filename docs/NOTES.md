@@ -618,7 +618,11 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - **Lửa:** lõi vàng trắng, vỏ cam, vệt mờ dài màu đỏ cam, 3 "vòng sáng" (shock diamond) dọc lõi; màu HDR nên bloom làm chúng phát sáng. Lửa nhấp nháy, dài ra theo mức đốt và theo tốc độ xe. Miệng ống đỏ rực.
   - **Ánh sáng:** đèn chớp cam từ bộ đèn chung của game (`render.lightPool.flash`, không thêm đèn mới nên không phải biên dịch lại shader) hắt xuống đất phía sau xe.
   - **Khói và tia lửa:** khói xám ở đuôi luồng lửa mỗi 0,05 s, thỉnh thoảng có tia lửa bắn theo hướng luồng lửa.
-  - **Âm thanh:** tiếng gầm tên lửa lặp (`Go.sx_rocket`: tiếng gầm trầm + rền + xì + tiếng lách tách), to dần và nhỏ dần theo mức đốt.
+  - **Âm thanh:**
+    - Lúc tên lửa vừa cháy: một tiếng "phụt" (`Go.sx_rocket_ignite`, 0,8 s): tiếng uỵch trầm + tiếng gió ngắn. Phát một lần, tắt hẳn rồi mới phát lại.
+    - Trong lúc đốt: vòng lặp `Go.sx_rocket` 2 s, gồm 4 lớp nhiễu lọc (rền dưới 95 Hz, gầm dưới 380 Hz, thân 820 Hz, gió 2,3 kHz), mỗi lớp đưa về cùng mức rồi mới trộn. Âm lượng phập phồng theo nhịp cháy 11 Hz và 17,5 Hz (số chu kỳ chẵn trong 2 s nên chỗ nối vòng liền), bóp méo nhẹ.
+    - Âm lượng và cao độ đổi mượt theo mức đốt (cao độ 0,88 → 1,1).
+    - Bản đầu tiên nghe kỳ, đo lại thì thấy: 48 % năng lượng trên 4 kHz (tiếng xì chói), bước nhảy giữa hai mẫu gần bằng biên độ tối đa (nổ lép bép do tiếng lách tách bật ngẫu nhiên và bóp méo mạnh), chỗ nối vòng hở 0,13 (kêu "tách" mỗi 2 s), cộng với cao độ ngẫu nhiên ±2 % mỗi khung hình (rè rít). Bản mới: 70 % năng lượng dưới 500 Hz, 20 % ở 500–1500 Hz, 2,6 % trên 4 kHz; bước nhảy lớn nhất 0,31; chỗ nối hở 0,006.
   - **Camera:** góc nhìn rộng thêm 8° (camera sau xe) hoặc 9° (ghế lái), ghế lái rung nhẹ.
   - Mức đốt `st.boostK` lên nhanh (9/s) xuống chậm hơn (5/s). Xe người khác lái (chơi mạng): bật lửa khi xe chạy nhanh hơn tốc độ tối đa thường 4 % (chỉ tăng tốc mới vượt được).
   - **Đã thử:** Sandcat và Rhino giữ Shift thì chỉ 2 ống của xe đang lái bật lửa (2/8 ống trong cảnh), nhả ra thì tắt hết (0/8); ảnh từ sau, bên hông và ghế lái.

@@ -12,31 +12,68 @@
 // The nozzles themselves (dark steel cans) are always there.
 // ============================================================================
 
-var SXC_BOOST = { flicker: 0.18, smokeEvery: 0.05, light: 26, lightR: 9, sound: 0.75 }
+var SXC_BOOST = { flicker: 0.18, smokeEvery: 0.05, light: 26, lightR: 9, sound: 0.55, ignite: 0.45 }
 
-// rocket roar for the sound table: a low torn roar + crackle + hiss, 2 s, seamless
+// layers of filtered noise, each scaled to unit RMS before the mix
+function SXC_unit(b) {
+  var e = 0
+  for (var i = 0; i < b.length; i++) e += b[i] * b[i]
+  var k = e > 0 ? 1 / Math.sqrt(e / b.length) : 0
+  for (var j = 0; j < b.length; j++) b[j] *= k
+  return b
+}
+function SXC_peak(s, p) {
+  var m = 0
+  for (var i = 0; i < s.length; i++) m = Math.max(m, Math.abs(s[i]))
+  if (m > 0) for (var j = 0; j < s.length; j++) s[j] *= p / m
+  return s
+}
+// The rocket roar loop for the sound table (2 s, seamless): a deep rumble, a
+// low roar and a mid body, a breath of air on top, swelling with the burn's
+// flutter (11 and 17.5 Hz: whole cycles in the loop, so the seam stays
+// clean). Every noise layer comes from Zc, which crossfades its own tail into
+// its head. (The first version, a hard-clipped mix with random crackle
+// bursts, measured half its energy above 4 kHz, sample-to-sample jumps near
+// full scale and a step at the loop seam: a hiss with pops and a tick every
+// 2 s.)
 function SXC_rocketGen() {
   return function (sr, rng) {
     var n = Math.round(sr * 2), s = new Float32Array(n)
-    var roar = Zc(sr, 2, rng, function (b) { tn(b, 'lp', 520, 0.8, sr) }, 0.25)
-    var rumble = Zc(sr, 2, rng, function (b) { tn(b, 'lp', 70, 0.7, sr) }, 0.25)
-    var hiss = Zc(sr, 2, rng, function (b) { tn(b, 'bp', 2600, 0.9, sr) }, 0.25)
-    var crack = Zc(sr, 2, rng, function (b) { tn(b, 'hp', 1500, 0.7, sr) }, 0.25)
-    var gate = 0
+    var rumble = SXC_unit(Zc(sr, 2, rng, function (b) { tn(b, 'lp', 95, 0.7, sr); tn(b, 'lp', 95, 0.7, sr) }, 0.3))
+    var roar = SXC_unit(Zc(sr, 2, rng, function (b) { tn(b, 'lp', 380, 0.6, sr); tn(b, 'hp', 55, 0.7, sr) }, 0.3))
+    var body = SXC_unit(Zc(sr, 2, rng, function (b) { tn(b, 'bp', 820, 0.8, sr) }, 0.3))
+    var air = SXC_unit(Zc(sr, 2, rng, function (b) { tn(b, 'bp', 2300, 1.4, sr) }, 0.3))
+    var w = 2 * Math.PI
     for (var i = 0; i < n; i++) {
-      // sparse crackle bursts (seamless: the gate restarts each 2 s)
-      if (rng() < 0.0016) gate = 1
-      gate *= 0.992
-      s[i] = Math.tanh((roar[i] * 1.5 + rumble[i] * 1.1 + hiss[i] * 0.35 + crack[i] * gate * 1.6) * 1.5)
+      var t = i / sr
+      var fl = 1 + 0.13 * Math.sin(w * 11 * t) + 0.07 * Math.sin(w * 17.5 * t + 1.3)
+      s[i] = Math.tanh((rumble[i] * 0.8 + roar[i] * 0.8 + body[i] * 0.5 + air[i] * 0.12) * fl * 0.42)
     }
-    return s
+    return SXC_peak(s, 0.95)
+  }
+}
+// the ignition: a soft thump and a short whoosh as the rockets light (0.8 s)
+function SXC_igniteGen() {
+  return function (sr, rng) {
+    var n = Math.round(sr * 0.8), s = new Float32Array(n)
+    var a = SXC_unit(tn(Qn(sr, 0.8, rng), 'lp', 1100, 0.7, sr))
+    var b = SXC_unit(tn(tn(Qn(sr, 0.8, rng), 'lp', 220, 0.7, sr), 'lp', 220, 0.7, sr))
+    for (var i = 0; i < n; i++) {
+      var t = i / sr
+      var env = Math.min(1, t / 0.025) * Math.exp(-t * 4.2)
+      var thump = Math.sin(2 * Math.PI * (48 + 30 * Math.exp(-t * 20)) * t) * Math.exp(-t * 11)
+      s[i] = Math.tanh((a[i] * 0.95 + b[i] * 0.7) * env * 0.5 + thump * 0.42)
+    }
+    return SXC_peak(s, 0.9)
   }
 }
 try {
   if (typeof Go !== 'undefined' && Go && typeof Zc === 'function' && typeof tn === 'function') {
     Go.sx_rocket = { gen: SXC_rocketGen(), n: 1, sr: Xn, peak: 0.6, loop: 1, ref: 12, roll: 0.8 }
+    if (typeof Qn === 'function') Go.sx_rocket_ignite = { gen: SXC_igniteGen(), n: 1, sr: Xn, peak: 0.7, ref: 10, roll: 0.9 }
   }
 } catch (e) { }
+try { window.__sxRocketGen = SXC_rocketGen; window.__sxIgniteGen = SXC_igniteGen } catch (e) { } // tests
 
 var SXC_BOOST_MATS = null
 function SXC_boostMats() {
@@ -93,17 +130,23 @@ function SXC_boostRig(G, spec) {
     root.add(g)
     return { g: g, fl: fl, core: core, sheath: sheath, plume: plume, dia: dia, glow: glow, r: r, tip: new V3() }
   })
-  var st = { k: 0, t: 0, smokeT: 0, snd: null }
+  var st = { k: 0, t: 0, smokeT: 0, snd: null, lit: false }
   var tmp = new V3(), back = new V3()
   function sound(k, pos) {
     if (!G.audio || !G.audio.loop) return
+    // the rockets light: one thump-whoosh (not again until they have gone out)
+    if (k > 0.05 && !st.lit) {
+      st.lit = true
+      try { G.audio.play && G.audio.play('sx_rocket_ignite', { pos: pos, gain: SXC_BOOST.ignite, pitch: 0.95 + Math.random() * 0.1 }) } catch (e) { }
+    } else if (k < 0.01) st.lit = false
     if (k > 0.02 && !st.snd) {
       try { var h = G.audio.loop('sx_rocket', { gain: 0, pitch: 1, pos: pos, ref: 10 }); if (h && h.setGain) st.snd = h } catch (e) { }
     }
     if (st.snd) {
       try {
+        // smooth: k is already eased; a per-frame random pitch made it warble
         st.snd.setGain(k * SXC_BOOST.sound)
-        st.snd.setPitch(0.85 + k * 0.35 + (Math.random() - 0.5) * 0.04)
+        st.snd.setPitch(0.88 + k * 0.22)
         st.snd.setPos && st.snd.setPos(pos)
       } catch (e) { }
       if (k <= 0.01) { try { st.snd.stop(0.25) } catch (e) { } st.snd = null }
