@@ -248,7 +248,7 @@ Số người một phòng tuỳ map và do host chọn. Ở màn hình chính b
 
 - **Cắt relay cũng gọi boss (chỉ khi chơi một mình):** mỗi lần cắt một relay, boss kế tiếp chưa xuất hiện sẽ tới ngay (test: relay A → Colossus, B → Petrel, C → Skua; mốc cuối 20 robot vẫn theo số robot bị hạ). Boss nào đã tới vì relay thì không tới lần nữa khi đủ số robot; dòng "… NEXT" trên HUD nhảy sang boss tiếp theo.
 - **Đếm thế nào:** chơi một mình thì đếm mọi lính robot bị hạ. Chơi nhiều người thì lấy số của đội đang dẫn đầu, mỗi đội chỉ tính robot do chính người trong đội hạ.
-- **Cứ điểm:** lính gác lớn ở cứ điểm cũng chờ tới mốc tương ứng: Colossus ở Ridge Post từ 5, Skua ở Radar Station từ 15.
+- **Cứ điểm:** lính gác lớn ở cứ điểm cũng chờ tới mốc tương ứng: Colossus (Ridge Post, Sunken Wells, Bunker Line) từ 5, Skua (Radar Station, West Quarry) từ 15.
 - **HUD:**
   - Dòng "ROBOTS DOWN x / y · … NEXT" dưới bộ đếm kill cho biết boss kế tiếp.
   - Bộ đếm kill và popup "YOU KILLED" cũng có khi chơi một mình: robot tính là của bạn nếu bạn bắn trúng nó trong 4 giây trước khi nó chết.
@@ -536,16 +536,30 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 
 ## outposts (cứ điểm trên map sa mạc)
 
-`outposts/outposts.js`, danh sách `SXO_SITES`. Mỗi cứ điểm nằm trong một lòng chảo phẳng được khoét vào giữa đồi cát.
+`outposts/outposts.js`, danh sách `SXO_SITES`. Mỗi cứ điểm nằm trong một lòng chảo phẳng được khoét vào giữa đồi cát. Có 11 cứ điểm: 4 cái gần căn cứ (trong 250 m) và 7 cái ngoài sa mạc xa, cách căn cứ 1–1,2 km.
 
 - **Camp Mirage (đồng minh, phía tây):**
   - Có 3 robot Sentinel đồng minh tự bắn máy địch.
   - Tiếp tế gồm đạn, lựu đạn, túi máu và túi máu lớn.
   - Có xe Rhino và Sandcat (nếu feature `cars` có mặt).
-- **Ridge Post, Radar Station, Fuel Depot (của địch):**
+- **Camp Oasis (đồng minh, xa về phía tây nam, -760 / 820):** ốc đảo có ao nước, 4 cây cọ, lều, bồn nước, 2 Sentinel, đồ tiếp tế và một xe Sandcat. Lần đầu tới gần thì có lời chào qua radio (trường `hello` của cứ điểm, Camp Mirage cũng dùng trường này).
+- **Ridge Post, Radar Station, Fuel Depot (của địch, gần căn cứ):**
   - Lại gần dưới 150 m (400 m nếu đang lái máy bay) thì lính gác xuất hiện: ụ súng, drone Gull, và robot to nếu có (Colossus ở Ridge Post, gunship Skua ở Radar Station).
   - Hạ hết lính gác thì chiếm được cứ điểm: đồng minh kéo tới và có thêm đồ tiếp tế.
-- **Marker trên màn hình:** đỏ là của địch, xanh là của mình. Kèm khoảng cách và số lính gác còn lại.
+- **6 cứ điểm địch ngoài sa mạc xa** (cùng luật thức dậy / chiếm như trên):
+  - **Salt Pan Relay** (820 / -520): cột ăng-ten 24 m có dây néo, 2 chảo ăng-ten, nhà thiết bị.
+  - **Sunken Wells** (-850 / -700): giếng đá có tời, 2 máy bơm dầu đang chạy, tháp nước, đường ống. Lính gác lớn là Colossus.
+  - **Scrapyard** (900 / 520): container gỉ chồng 2–3 tầng, xe cháy, đống xác xe bị ép, cần cẩu có nam châm.
+  - **Checkpoint Nine** (-80 / 980): trạm gác cạnh đường cao tốc (cách 130 m về phía đông), 2 tháp canh gỗ, chốt gác, barie, rào chữ chi.
+  - **West Quarry** (-1050 / 250): mỏ đá với các khối đá lớn, 2 đống sỏi, băng chuyền, nhà điều hành. Lính gác lớn là gunship Skua.
+  - **Bunker Line** (420 / -1120): boongke bê tông vào được (cửa phía nam, khe bắn phía bắc), 2 lô cốt, hàng "răng rồng" chống xe, 6 ụ súng. Lính gác lớn là Colossus.
+  - Vị trí được chọn để không đụng đường cao tốc, núi mesa và các cứ điểm khác; con dốc lên núi và cột điện ven đường không đổi.
+- **Marker trên màn hình:** đỏ là của địch, xanh là của mình. Kèm khoảng cách và số lính gác còn lại. Hiện cho mọi cứ điểm trên map; cứ điểm xa hơn 650 m thì marker mờ và nhỏ hơn.
+- **Hiệu năng** (`SXO_split`, gọi từ `SXD_level` sau bước gộp nhãn):
+  - Mỗi cứ điểm được gộp thành một nhóm mesh riêng (`outpost-<id>`), không nhập vào mesh chung `level-merged` của cả map. Mesh chung trải khắp sa mạc nên lúc nào cũng phải vẽ (kể cả shadow pass); nhóm riêng thì bị frustum culling bỏ khi nằm ngoài tầm nhìn.
+  - Cứ điểm cách camera hơn `SXO_DRAW` (1000 m, tính từ mép) thì không vẽ. Ở khoảng đó sương đã che gần hết và đồi cát thường chắn tầm nhìn; marker vẫn hiện.
+  - Đo ở điểm xuất phát (4 hướng nhìn): số tam giác mỗi frame giảm từ 1,0–1,8 triệu xuống 0,66–1,4 triệu so với trước khi có 7 cứ điểm mới, dù cả scene có thêm khoảng 400 nghìn tam giác.
+- **Hàm dựng riêng của cứ điểm:** `watchtower`, `bunker`, `pillbox`, `tooth`, `gravel`, `crushed`, `crane`, `well`, `pond`, `palm` (lá cọ là dải cong thon gập chữ V, vật liệu hai mặt), `conveyor`, `guyWires`. Nước ao và giếng dùng vật liệu `sxo_water` (xanh lục đậm, bóng, gợn sóng cố định). `SXD_level` đưa thêm `pumpjack` vào API cho cứ điểm dùng.
 
 ## troopers (lính địch hình người, cả 2 map)
 

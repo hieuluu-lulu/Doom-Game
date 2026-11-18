@@ -758,7 +758,7 @@ async function SXD_level(i) {
   // --- outposts out on the dunes (outposts feature) ---
   if (typeof SXO_layout === 'function') {
     try {
-      SXO_layout({ t: t, place: place, M: M, ts: ts, rock: rock, rockCluster: rockCluster, scrub: scrub, wall: wall, sandbagRow: sandbagRow, truck: truck, fuelTank: fuelTank, waterTower: waterTower, mast: mast, pipeline: pipeline, lamps: lamps })
+      SXO_layout({ t: t, place: place, M: M, ts: ts, rock: rock, rockCluster: rockCluster, scrub: scrub, wall: wall, sandbagRow: sandbagRow, truck: truck, fuelTank: fuelTank, waterTower: waterTower, mast: mast, pipeline: pipeline, pumpjack: pumpjack, lamps: lamps })
     } catch (e) {
       console.error('[desert] outposts layout failed', e)
     }
@@ -805,6 +805,14 @@ async function SXD_level(i) {
     atlas = rb(t.staticRoot)
   } catch (e) {
     console.error('[desert] label atlas failed', e)
+  }
+  // outposts: one merged group per site, so the far ones cull (outposts feature)
+  if (typeof SXO_split === 'function') {
+    try {
+      SXO_split(t, root)
+    } catch (e) {
+      console.error('[desert] outposts split failed', e)
+    }
   }
   var merged = By(t.staticRoot)
   merged.name = 'level-merged'

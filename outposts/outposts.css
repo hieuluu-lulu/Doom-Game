@@ -7,3 +7,5 @@
 .sxo-mark span { font: 500 10px/1 var(--f-mono); color: var(--bone-dim); text-shadow: 0 0 3px rgba(0, 0, 0, .7); white-space: nowrap; }
 .sxo-mark.hostile i { border-color: var(--alarm); }
 .sxo-mark.hostile b { color: var(--alarm); }
+.sxo-mark.far { opacity: .6; }
+.sxo-mark.far i { width: 8px; height: 8px; }

@@ -1,8 +1,9 @@
 // ============================================================================
 // DoomZone mod — OUTPOSTS (desert map only)
-// Four sites out on the dunes, each in a flat bowl carved into the terrain
-// (SXD_terrainHeight reads SXO_SITES). Camp Mirage is ours from the start;
-// Ridge Post, Radar Station and the Fuel Depot are held by machines.
+// Eleven sites out on the dunes, each in a flat bowl carved into the terrain
+// (SXD_terrainHeight reads SXO_SITES). Camp Mirage and, far out, Camp Oasis
+// are ours from the start; Ridge Post, Radar Station and the Fuel Depot near
+// the basin and six posts in the deep desert (1-1.2 km out) are held by machines.
 //   * SXO_layout(api)      builds the structures inside SXD_level (colliders,
 //                          merged meshes, same builders as the basin)
 //   * SXU_TYPES.turret     enemy gun emplacement (static, telegraphed bursts)
@@ -15,6 +16,7 @@
 var SXO_SITES = [
   {
     id: 'mirage', name: 'Camp Mirage', side: 'ally', x: -175, z: -35, r: 22,
+    hello: 'Mirage: Breacher, welcome to Camp Mirage. Take what you need — the Rhino is fuelled.',
     sentinels: [[4, 5], [-7, -3], [3, -9]], supplies: [['ammo', -3, 7], ['grenade', -0.6, 8.6], ['med', -6.2, 7.2], ['med_l', -8.6, 5], ['ammo', 7, -2], ['att:x4', -1.5, 4.6], ['att:grip', 1.2, 6.2], ['att:stock', 0.2, 3.4], ['att:extmag', -3.4, 3.2], ['att:comp', 2.6, 4.4], ['vest2', -4.6, 9.2], ['helm2', -2.8, 10.4], ['bag1', -6.8, 9.8], ['bag2', 1.4, 9.6]],
     vehicles: [['rhino', 13, 6, -1.57], ['sandcat', 12, -3, -1.57]],
   },
@@ -32,6 +34,44 @@ var SXO_SITES = [
     id: 'depot', name: 'Fuel Depot', side: 'enemy', x: -70, z: -240, r: 24,
     turrets: [[-13, 4], [13, -4], [0, 15], [0, -15], [-10, -11]], gulls: 4,
     sentinels: [[4, 2], [-4, -2], [0, 7]], supplies: [['ammo', 5, 8], ['med', 7, 8], ['grenade', 3, 9.5], ['ammo', -8, 2], ['att:extmag', 9, 9.6], ['att:holo', 6.5, 10.4], ['att:stock', 4.5, 11.2], ['vest3', -9.5, 5.5], ['helm3', -7, 7.4], ['bag3', -5, 9.6]],
+  },
+  // ---- the deep desert, 1-1.2 km from the basin (the map reaches 1.5 km):
+  // clear of the highway (> 120 m), the mesas and each other
+  {
+    id: 'saltpan', name: 'Salt Pan Relay', side: 'enemy', x: 820, z: -520, r: 22,
+    turrets: [[-13, 6], [11, -10], [13, 10], [-8, -13]], gulls: 3,
+    sentinels: [[4, -4], [-2, 2]], supplies: [['ammo', 2, 6], ['med', 4, 6.5], ['grenade', 0, 7.2], ['att:x4', -1.5, 6.2], ['helm2', 3.4, 8.4], ['med_s', 5.6, 5.4]],
+  },
+  {
+    id: 'wells', name: 'Sunken Wells', side: 'enemy', x: -850, z: -700, r: 24,
+    turrets: [[-13, 6], [14, -4], [2, 15], [-2, -15]], gulls: 3, guard: 'colossus',
+    sentinels: [[4, 3], [-5, -2]], supplies: [['ammo', -4, 8.6], ['med_l', -2, 9.2], ['grenade', -6, 9.4], ['att:extmag', 0, 8.8], ['vest2', -8.2, 8], ['bag2', 2, 9.8]],
+  },
+  {
+    id: 'scrapyard', name: 'Scrapyard', side: 'enemy', x: 900, z: 520, r: 26,
+    turrets: [[-13, -6], [13, 6], [-4, 15], [6, -15], [16, -10]], gulls: 4,
+    sentinels: [[2, 3], [-3, -4], [6, -1]], supplies: [['ammo', -6, -2], ['ammo', 5, 9], ['med', -7, -0.5], ['grenade', 7, 9.6], ['att:supp', -8.4, -3], ['att:grip', 6, 10.8], ['vest3', 3, 11], ['helm3', -9, 1], ['shotgun', -4.6, 1.2]],
+  },
+  {
+    id: 'checkpoint', name: 'Checkpoint Nine', side: 'enemy', x: -80, z: 980, r: 22,
+    turrets: [[-11, 6], [11, 6], [-8, -12], [9, -11]], gulls: 2,
+    sentinels: [[0, 4], [-4, -5]], supplies: [['ammo', 6, -4], ['med', 7.5, -2.6], ['grenade', 6.2, -6.2], ['att:holo', 4.6, -2], ['att:comp', 8.6, -5.4], ['helm2', 4, -6.4], ['bag1', 9.2, -1]],
+  },
+  {
+    id: 'quarry', name: 'West Quarry', side: 'enemy', x: -1050, z: 250, r: 26,
+    turrets: [[-14, 4], [14, -4], [-2, 16], [9, 14], [-9, -13]], gulls: 3, guard: 'skua',
+    sentinels: [[3, -2], [-3, 4]], supplies: [['ammo', 4, -9], ['med_l', 6, -8.4], ['grenade', 2, -10.4], ['sniper', 8, -10], ['att:x8', 9.4, -8.2], ['vest3', 3.4, -12]],
+  },
+  {
+    id: 'bunker', name: 'Bunker Line', side: 'enemy', x: 420, z: -1120, r: 24,
+    turrets: [[-14, -8], [14, -8], [-14, 8], [14, 8], [0, -16], [0, 16]], gulls: 3, guard: 'colossus',
+    sentinels: [[6, 0], [-6, 0], [0, -11]], supplies: [['ammo', -6, -4], ['ammo', 6, -4], ['med_l', -6, -6], ['grenade', 6, -6], ['att:supp', -4, -7.4], ['att:extmag', 4, -7.4], ['vest3', -1.2, -8], ['helm3', 1.2, -8], ['bag3', 0, -5.4]],
+  },
+  {
+    id: 'oasis', name: 'Camp Oasis', side: 'ally', x: -760, z: 820, r: 22,
+    hello: 'Oasis: Breacher, you made it all the way out here. Water, ammo and a Sandcat — help yourself.',
+    sentinels: [[5, 4], [-6, -4]], supplies: [['ammo', -2, 6.4], ['ammo', 2, 6.4], ['grenade', 0, 7.6], ['med_l', -4.2, 6.6], ['med', 4.2, 6.6], ['att:x4', -1, 8.6], ['att:supp', 1.2, 8.6], ['vest2', -3.4, 9.6], ['helm2', 3.4, 9.6], ['bag2', 0, 10.4]],
+    vehicles: [['sandcat', 12, -4, -1.57]],
   },
 ]
 
@@ -89,11 +129,206 @@ function SXO_layout(api) {
     t.add(g, white, {})
     t.col(x - 0.4, 0, z - 0.4, x + 0.4, 3.4, z + 0.4, 'metal')
   }
+  var wood = M('wood_dark'), plank = M('wood_pallet'), roofM = M('corrugated_roof'), galv = M('steel_galv'), rust = M('steel_rust'), dirt = M('concrete_dirty')
+  // timber watchtower: splayed legs, braces, a boarded platform, tin roof, ladder
+  function watchtower(x, z) {
+    var H = 4.8, b = 1.55, tp = 1.25
+    for (var k = 0; k < 4; k++) {
+      var sx = k & 1 ? 1 : -1, sz = k & 2 ? 1 : -1
+      t.rod(wood, [x + sx * b, 0, z + sz * b], [x + sx * tp, H, z + sz * tp], 0.1, { seg: 6 })
+      t.rod(wood, [x + sx * tp, H, z + sz * tp], [x + sx * tp, H + 2.3, z + sz * tp], 0.06, { seg: 5 })
+      t.col(x + sx * b - 0.2, 0, z + sz * b - 0.2, x + sx * b + 0.2, 2.4, z + sz * b + 0.2, 'wood')
+    }
+    for (var y of [1.4, 3.2]) {
+      var r0 = b + (tp - b) * (y / H), r1 = b + (tp - b) * ((y + 1.5) / H)
+      t.rod(wood, [x - r0, y, z - r0], [x + r1, y + 1.5, z - r1], 0.045, { seg: 4 })
+      t.rod(wood, [x - r0, y, z + r0], [x + r1, y + 1.5, z + r1], 0.045, { seg: 4 })
+      t.rod(wood, [x - r0, y, z - r0], [x - r1, y + 1.5, z + r1], 0.045, { seg: 4 })
+      t.rod(wood, [x + r0, y, z - r0], [x + r1, y + 1.5, z + r1], 0.045, { seg: 4 })
+    }
+    t.box(plank, 3.1, 0.14, 3.1, x, H, z, { bevel: 0.02 })
+    t.box(plank, 3.1, 0.9, 0.08, x, H + 0.52, z - 1.52)
+    t.box(plank, 3.1, 0.9, 0.08, x, H + 0.52, z + 1.52)
+    t.box(plank, 0.08, 0.9, 3.1, x - 1.52, H + 0.52, z)
+    t.box(plank, 0.08, 0.9, 1.6, x + 1.52, H + 0.52, z - 0.75)
+    t.box(roofM, 3.7, 0.06, 3.7, x, H + 2.35, z, { r: [0.08, 0, 0] })
+    for (var s of [-0.24, 0.24]) t.rod(wood, [x + b + 0.35, 0, z + 0.6 + s], [x + tp + 0.12, H, z + 0.6 + s], 0.03, { seg: 4 })
+    for (var ry = 0.4; ry < H; ry += 0.4) {
+      var fx = b + 0.35 + (tp + 0.12 - b - 0.35) * (ry / H)
+      t.rod(wood, [x + fx, ry, z + 0.36], [x + fx, ry, z + 0.84], 0.02, { seg: 4 })
+    }
+    t.col(x - 1.6, H - 0.08, z - 1.6, x + 1.6, H + 0.1, z + 1.6, 'wood')
+  }
+  // reinforced-concrete bunker, door in the south (-z) wall, gun slit in the north one
+  function bunker(x, z, w, d, h) {
+    var th = 0.6, hw = w / 2, hd = d / 2, door = 0.9
+    var B = function (bw, bh, bd, cx, cy, cz) {
+      t.box(dirt, bw, bh, bd, cx, cy, cz, { bevel: 0.04 })
+      t.col(cx - bw / 2, cy - bh / 2, cz - bd / 2, cx + bw / 2, cy + bh / 2, cz + bd / 2, 'concrete')
+    }
+    B(w, 1.25, th, x, 0.625, z + hd - th / 2)
+    B(w, h - 1.7, th, x, (h + 1.7) / 2, z + hd - th / 2)
+    B(0.9, 0.45, th, x - hw + 0.45, 1.475, z + hd - th / 2)
+    B(0.9, 0.45, th, x + hw - 0.45, 1.475, z + hd - th / 2)
+    B(0.9, 0.45, th, x, 1.475, z + hd - th / 2)
+    B(th, h, d, x - hw + th / 2, h / 2, z)
+    B(th, h, d, x + hw - th / 2, h / 2, z)
+    B(hw - door, h, th, x - (hw + door) / 2, h / 2, z - hd + th / 2)
+    B(hw - door, h, th, x + (hw + door) / 2, h / 2, z - hd + th / 2)
+    B(door * 2, h - 2.1, th, x, (h + 2.1) / 2, z - hd + th / 2)
+    B(w + 0.8, 0.5, d + 0.8, x, h + 0.25, z)
+    t.box(M('hazard_stripes'), door * 2 + 0.2, 0.16, 0.05, x, 2.18, z - hd - 0.02)
+    api.sandbagRow(x - hw + 1.2, z + hd + 0.9, 0, 2, S())
+    api.sandbagRow(x + hw - 1.2, z + hd + 0.9, 0, 2, S())
+  }
+  function pillbox(x, z) {
+    t.cyl(dirt, 2.0, 1.95, x, 0.975, z, { seg: 18 })
+    t.cyl(dirt, 2.35, 0.36, x, 2.13, z, { seg: 18 })
+    t.box(steel, 2.4, 0.2, 0.12, x, 1.5, z + 1.96)
+    t.col(x - 1.7, 0, z - 1.7, x + 1.7, 2.3, z + 1.7, 'concrete')
+  }
+  // anti-tank "dragon's teeth"
+  function tooth(x, z) {
+    t.cyl(dirt, 0.72, 1.15, x, 0.575, z, { seg: 4, rTop: 0.12 })
+    t.col(x - 0.45, 0, z - 0.45, x + 0.45, 1.05, z + 0.45, 'concrete')
+  }
+  // a pile of gravel / spoil (stepped colliders, too steep to climb)
+  function gravel(x, z, R, H) {
+    t.cyl(dirt, R, H, x, H / 2, z, { seg: 18, rTop: 0.5 })
+    t.col(x - R * 0.72, 0, z - R * 0.72, x + R * 0.72, H * 0.38, z + R * 0.72, 'concrete')
+    t.col(x - R * 0.42, 0, z - R * 0.42, x + R * 0.42, H * 0.72, z + R * 0.42, 'concrete')
+  }
+  // flattened car hulks stacked up
+  function crushed(x, z, yaw, n) {
+    var paints = ['steel_rust', 'paint_teal', 'steel_rust', 'paint_red', 'paint_white', 'steel_rust']
+    for (var k = 0; k < n; k++) {
+      var j = ((k * 37) % 7) / 7 - 0.5
+      t.box(M(paints[(k + Math.round(x)) % paints.length]), 4.1, 0.52, 1.85, x + j * 0.4, 0.27 + k * 0.54, z - j * 0.3, { bevel: 0.06, r: [0, yaw + j * 0.5, 0] })
+    }
+    t.col(x - 2.2, 0, z - 2.2, x + 2.2, n * 0.54, z + 2.2, 'metal')
+  }
+  // a scrap crane: lattice tower, jib along +x, a magnet hanging off it
+  function crane(x, z, H, L) {
+    var yel = M('paint_yellow')
+    var c = [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]
+    for (var k = 0; k < 4; k++) t.rod(yel, [x + c[k][0], 0, z + c[k][1]], [x + c[k][0], H, z + c[k][1]], 0.07, { seg: 5 })
+    for (var y = 0; y < H - 0.1; y += 1.6) {
+      for (var k2 = 0; k2 < 4; k2++) {
+        var a = c[k2], b2 = c[(k2 + 1) % 4]
+        t.rod(galv, [x + a[0], y, z + a[1]], [x + b2[0], y + 1.6, z + b2[1]], 0.025, { seg: 3 })
+        t.rod(galv, [x + a[0], y + 1.6, z + a[1]], [x + b2[0], y + 1.6, z + b2[1]], 0.025, { seg: 3 })
+      }
+    }
+    t.box(yel, 2.4, 1.6, 2.0, x - 0.6, H + 0.8, z, { bevel: 0.04 })
+    t.box(M('glass_dirty'), 0.05, 0.7, 1.4, x + 0.62, H + 1.0, z)
+    t.box(dirt, 1.6, 1.1, 1.8, x - 2.4, H + 0.6, z)
+    t.rod(yel, [x - 1.6, H + 1.4, z - 0.45], [x + L, H + 1.4, z - 0.45], 0.07, { seg: 5 })
+    t.rod(yel, [x - 1.6, H + 1.4, z + 0.45], [x + L, H + 1.4, z + 0.45], 0.07, { seg: 5 })
+    t.rod(yel, [x - 1.6, H + 2.4, z], [x + L * 0.98, H + 1.45, z], 0.06, { seg: 5 })
+    for (var jx = -1; jx < L; jx += 1.4) t.rod(galv, [x + jx, H + 1.4, z - 0.45], [x + jx + 0.7, H + 1.4 + 0.95 * (1 - (jx + 0.7) / L), z], 0.02, { seg: 3 })
+    var hx = x + L * 0.82, hy = 6.2
+    t.rod(steel, [hx, H + 1.35, z - 0.08], [hx, hy + 0.5, z - 0.08], 0.018, { seg: 4 })
+    t.rod(steel, [hx, H + 1.35, z + 0.08], [hx, hy + 0.5, z + 0.08], 0.018, { seg: 4 })
+    t.cyl(steel, 0.85, 0.35, hx, hy, z, { seg: 18 })
+    t.cyl(M('paint_orange'), 0.2, 0.3, hx, hy + 0.32, z, { seg: 10 })
+    t.col(x - 0.8, 0, z - 0.8, x + 0.8, H, z + 0.8, 'metal')
+  }
+  // still oasis water: dark teal, glossy, a fixed ripple in the normal
+  var waterM = new lt.MeshStandardMaterial({ color: 0x1c4446, roughness: 0.05, metalness: 0.1, envMapIntensity: 1.4 })
+  waterM.name = 'sxo_water'
+  waterM.onBeforeCompile = function (sh) {
+    sh.vertexShader = 'varying vec3 vSxoW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vSxoW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    sh.fragmentShader = 'varying vec3 vSxoW;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>',
+      '#include <normal_fragment_maps>\n  { vec2 q = vSxoW.xz; float a = sin(q.x * 2.3) + sin(q.y * 3.1 + q.x * 0.7) * 0.7 + sin((q.x + q.y) * 6.1) * 0.3;\n    float b = cos(q.y * 2.6) + cos(q.x * 3.4 - q.y * 0.9) * 0.6 + cos((q.x - q.y) * 5.7) * 0.3;\n    normal = normalize(normal + mat3(viewMatrix) * vec3(a * 0.025, 0.0, b * 0.025)); }')
+  }
+  waterM.customProgramCacheKey = function () { return 'sxo-water-1' }
+  var frondM = new lt.MeshStandardMaterial({ color: 0x5c7330, roughness: 0.85, side: lt.DoubleSide })
+  frondM.name = 'sxo_frond'
+  // one palm frond: a tapering strip arching out and down, folded into a shallow V
+  function frondGeo(L, W, droop) {
+    var n = 9, pos = [], idx = []
+    for (var k = 0; k <= n; k++) {
+      var u = k / n, x = L * u, y = L * (0.18 * u - droop * u * u)
+      var w = W * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.04)), 0.7) * (1 - u * 0.45)
+      pos.push(x, y - w * 0.4, -w, x, y, 0, x, y - w * 0.4, w)
+      if (k < n) {
+        var a = k * 3
+        idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5)
+      }
+    }
+    var g = new lt.BufferGeometry()
+    g.setAttribute('position', new lt.Float32BufferAttribute(pos, 3))
+    g.setAttribute('uv', new lt.Float32BufferAttribute(new Array((n + 1) * 6).fill(0), 2))
+    g.setIndex(idx)
+    g.computeVertexNormals()
+    return g
+  }
+  // stone well with a windlass and a bucket
+  function well(x, z) {
+    t.cyl(M('sxd_adobe'), 1.3, 0.85, x, 0.425, z, { seg: 20 })
+    t.cyl(waterM, 1.02, 0.02, x, 0.86, z, { seg: 20 })
+    for (var s of [-1, 1]) t.rod(wood, [x + s * 1.12, 0.85, z], [x + s * 1.12, 2.3, z], 0.07, { seg: 5 })
+    t.rod(wood, [x - 1.3, 2.18, z], [x + 1.3, 2.18, z], 0.07, { seg: 6 })
+    t.rod(M('rope'), [x, 2.12, z], [x, 1.25, z], 0.014, { seg: 4 })
+    t.cyl(M('steel_worn'), 0.18, 0.3, x, 1.1, z, { seg: 10 })
+    t.col(x - 1.25, 0, z - 1.25, x + 1.25, 0.85, z + 1.25, 'concrete')
+  }
+  // a small pond ringed with stones
+  function pond(x, z, R, seed) {
+    t.cyl(waterM, R, 0.04, x, 0.02, z, { seg: 36 })
+    var r = SXD_rng(seed)
+    for (var k = 0; k < 14; k++) {
+      var a = (k / 14) * 6.28 + r() * 0.3, s = 0.35 + r() * 0.35
+      api.rock(x + Math.cos(a) * (R + 0.1), z + Math.sin(a) * (R + 0.1), s * 1.3, s * 0.55, s, r() * 6.28, seed * 7 + k, { noCol: true })
+    }
+  }
+  // date palm: a leaning, tapering trunk and a crown of drooping fronds
+  function palm(x, z, H, lean, seed) {
+    var r = SXD_rng(seed), la = r() * 6.28, top = null, prev = [x, 0, z]
+    for (var k = 1; k <= 6; k++) {
+      var f = k / 6, off = lean * f * f
+      var p = [x + Math.cos(la) * off, H * f, z + Math.sin(la) * off]
+      t.rod(wood, prev, p, 0.2 - 0.08 * f, { seg: 7, cast: true })
+      prev = p
+    }
+    top = prev
+    for (var n = 0; n < 11; n++) {
+      var a = (n / 11) * 6.28 + r() * 0.4, g = frondGeo(2.6 + r() * 0.9, 0.42 + r() * 0.12, 0.45 + r() * 0.35)
+      g.rotateY(-a)
+      t.add(g, frondM, { p: [top[0], top[1] - 0.1, top[2]] })
+    }
+    t.cyl(wood, 0.24, 0.5, top[0], top[1] - 0.3, top[2], { seg: 8, rTop: 0.14 })
+    t.col(x - 0.25, 0, z - 0.25, x + 0.25, H * 0.5, z + 0.25, 'wood')
+  }
+  // a belt conveyor between two points (low end → high end) on trestles
+  function conveyor(x0, y0, x1, y1, z) {
+    var len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan((y1 - y0) / (x1 - x0)) // tilt in (-90°, 90°): the box's +y stays up
+    var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
+    t.box(steel, len, 0.18, 1.0, cx, cy, z, { r: [0, 0, ang] })
+    t.box(M('rubber'), len, 0.04, 0.8, cx - Math.sin(ang) * 0.11, cy + Math.cos(ang) * 0.11, z, { r: [0, 0, ang] })
+    for (var f = 0.15; f < 0.95; f += 0.32) {
+      var px = x0 + (x1 - x0) * f, py = y0 + (y1 - y0) * f
+      for (var s of [-0.45, 0.45]) t.rod(galv, [px, 0, z + s], [px, py - 0.1, z + s], 0.05, { seg: 5 })
+      t.col(px - 0.15, 0, z - 0.55, px + 0.15, py, z + 0.55, 'metal')
+    }
+    t.box(steel, 1.7, 1.3, 1.7, x0 + Math.sign(x0 - x1) * 0.6, 0.85, z, { bevel: 0.03 })
+    t.col(x0 + Math.sign(x0 - x1) * 0.6 - 0.85, 0, z - 0.85, x0 + Math.sign(x0 - x1) * 0.6 + 0.85, 1.5, z + 0.85, 'metal')
+  }
+  function guyWires(x, z, y, R, angs) {
+    angs.forEach(function (a) {
+      var gx = x + Math.cos(a) * R, gz = z + Math.sin(a) * R
+      t.rod(galv, [x, y, z], [gx, 0.25, gz], 0.012, { seg: 3 })
+      t.box(dirt, 0.5, 0.25, 0.5, gx, 0.12, gz)
+    })
+  }
 
+  SXO_GROUPS = []
   SXO_SITES.forEach(function (site) {
     var X = site.x, Z = site.z
     var P = function (dx, dz) { return [X + dx, Z + dz] }
     var p
+    var n0 = t.staticRoot.children.length
+    SXO_GROUPS.push({ site: site, from: n0 })
     if (site.id === 'mirage') {
       tent(X - 8, Z + 6, 0.1, 6, 4, 2.6)
       tent(X - 1, Z + 11, ts, 5, 3.6, 2.4)
@@ -171,8 +406,214 @@ function SXO_layout(api) {
       place('light_mast', X + 16, Z - 14, 0, { seed: S() })
       place('light_mast', X - 16, Z + 16, 0, { seed: S() })
       api.rockCluster(X + 20, Z + 18, 3, 1.4, S())
+    } else if (site.id === 'saltpan') {
+      // a relay mast on the salt flat: guyed lattice, two dishes, an equipment hut
+      api.mast(X, Z - 2, 24)
+      guyWires(X, Z - 2, 18, 13, [0.8, 2.9, 4.6])
+      dish(X - 8, Z - 6, 0.9)
+      dish(X + 7, Z - 9, -0.5)
+      hut(X - 6, Z + 7, 6, 5, 2.7, 0, 'n')
+      p = P(13, -1); t.stack(p[0], p[1], [[20, 'white', { wear: 0.8 }]], ts)
+      place('generator', X + 7, Z + 1, 0.2, { seed: S() })
+      place('cable_reel', X - 3, Z - 8, 0.3, { seed: S() })
+      place('cable_reel', X + 3.5, Z - 11, 1.2, { seed: S() })
+      place('light_mast', X - 16, Z - 4, 0, { seed: S() })
+      place('light_mast', X + 9, Z + 15, 0, { seed: S() })
+      place('barrel', X + 9, Z + 4, 0, { seed: S(), color: 'yellow' })
+      place('barrel', X + 9.7, Z + 4.6, 0.5, { seed: S() })
+      place('jersey_barrier', X - 2, Z + 18, 0.05, { seed: S() })
+      place('jersey_barrier', X + 3, Z + 18.2, -0.04, { seed: S() })
+      api.sandbagRow(X - 18, Z + 2, ts, 3, S())
+      api.sandbagRow(X + 18, Z - 6, ts, 3, S())
+      api.sandbagRow(X + 2, Z - 18, 0, 3, S())
+      api.rockCluster(X + 22, Z + 14, 3, 1.4, S())
+      api.rockCluster(X - 22, Z - 15, 4, 1.6, S())
+      api.scrub(X + 17, Z - 16, 1.1, S())
+    } else if (site.id === 'wells') {
+      // pumping station round an old well: two pumpjacks, a water tower, pipes
+      well(X, Z - 1)
+      api.pumpjack(X - 9, Z - 8, 0.3, 'paint_red', S())
+      api.pumpjack(X + 8, Z - 11, -0.5, 'paint_blue', S())
+      api.waterTower(X + 10, Z + 7)
+      p = P(-8, 13); api.fuelTank(p[0], p[1], true, 6, 1.1, 'paint_white', 'WATER')
+      api.pipeline(X - 20, X - 2, Z + 3, S())
+      api.truck(X - 15, Z - 3, ts + 0.2, { canopy: true, paint: 'paint_yellow' })
+      place('generator', X + 6, Z - 3, 0.4, { seed: S() })
+      place('ibc_tote', X - 12, Z + 9, 0.1, { seed: S() })
+      place('ibc_tote', X - 13.4, Z + 9.3, 0.05, { seed: S() })
+      place('gas_cylinders', X + 15, Z + 13, 0.3, { seed: S() })
+      place('pipe_stack', X - 16, Z - 14, 0.4, { seed: S() })
+      place('barrel', X + 3, Z - 6, 0, { seed: S(), color: 'blue' })
+      place('barrel', X + 3.7, Z - 6.5, 0.4, { seed: S() })
+      place('light_mast', X + 17, Z - 15, 0, { seed: S() })
+      place('light_mast', X - 18, Z + 16, 0, { seed: S() })
+      api.sandbagRow(X - 21, Z - 9, ts, 3, S())
+      api.sandbagRow(X + 21, Z + 2, ts, 3, S())
+      api.sandbagRow(X + 6, Z + 21, 0, 3, S())
+      api.sandbagRow(X - 6, Z - 21, 0, 3, S())
+      api.rockCluster(X + 24, Z - 17, 3, 1.5, S())
+      api.rockCluster(X - 25, Z + 17, 4, 1.4, S())
+      api.scrub(X - 19, Z + 21, 1.2, S())
+    } else if (site.id === 'scrapyard') {
+      // a scrap yard: rusted container stacks, burnt trucks, crushed hulks, a magnet crane
+      p = P(-11, -13); t.stack(p[0], p[1], [[40, 'red', { wear: 0.95 }], [40, 'grey', { wear: 0.95 }]], 0.15)
+      p = P(12, -2); t.stack(p[0], p[1], [[20, 'blue', { wear: 0.9 }]], ts)
+      p = P(18, 16); t.stack(p[0], p[1], [[20, 'orange', { wear: 0.95 }], [20, 'green', { wear: 0.9 }], [20, 'white', { wear: 0.9 }]], 0.4)
+      api.truck(X - 2, Z + 8, 0.4, { burnt: true })
+      api.truck(X - 17, Z + 7, 1.3, { burnt: true })
+      api.truck(X + 9, Z + 18, 2.5, { burnt: true })
+      crushed(X - 18, Z + 16, 0.3, 4)
+      crushed(X + 20, Z - 18, 1.2, 3)
+      crushed(X + 2, Z - 20, 0.1, 5)
+      crane(X - 7, Z - 21, 12, 10)
+      place('tire_stack', X + 3, Z - 6, 0.3, { seed: S() })
+      place('tire_stack', X + 4.3, Z - 7.3, 1, { seed: S() })
+      place('tire_stack', X - 10, Z + 12, 0.2, { seed: S() })
+      place('dumpster', X - 14, Z + 1, ts, { seed: S() })
+      place('pipe_stack', X + 9, Z + 3, 0.2, { seed: S() })
+      place('cable_reel', X - 1, Z - 10, 0.5, { seed: S() })
+      place('barrel', X + 1.2, Z - 12, 0, { seed: S(), color: 'red' })
+      place('barrel', X + 0.4, Z - 12.7, 0.4, { seed: S() })
+      place('light_mast', X + 21, Z + 3, 0, { seed: S() })
+      place('light_mast', X - 21, Z - 4, 0, { seed: S() })
+      api.sandbagRow(X + 1, Z + 23, 0, 3, S())
+      api.rockCluster(X + 28, Z + 9, 3, 1.4, S())
+      api.scrub(X - 26, Z - 14, 1.2, S())
+    } else if (site.id === 'checkpoint') {
+      // a road checkpoint watching the highway (west): towers, a booth, a chicane
+      watchtower(X - 15, Z - 13)
+      watchtower(X + 14, Z + 12)
+      hut(X + 5, Z + 14, 6, 4.4, 2.6, 0, 'n')
+      p = P(-5, 15); t.stack(p[0], p[1], [[20, 'yellow', { wear: 0.8 }]], 0)
+      flag(X - 2, Z, M('paint_red'))
+      api.truck(X + 15, Z - 3, ts, { canopy: true, paint: 'paint_grey' })
+      place('guard_booth', X - 17, Z + 3, ts, { seed: S() })
+      place('gate_arm', X - 19, Z - 1, ts, { seed: S() })
+      place('jersey_barrier', X - 20, Z - 6, ts, { seed: S() })
+      place('jersey_barrier', X - 20, Z + 9, ts, { seed: S() })
+      place('jersey_barrier', X - 14, Z + 6.5, 0.05, { seed: S() })
+      for (var c = 0; c < 4; c++) place('traffic_cone', X - 22, Z - 3 + c * 1.6, 0, { seed: S() })
+      place('sign_post', X - 21, Z + 12, ts, { seed: S() })
+      place('floodlight_stand', X - 12, Z - 4, 0.8, { seed: S() })
+      place('crate_stack', X + 10.5, Z + 1.5, 0.2, { seed: S() })
+      place('barrel', X + 11, Z - 8, 0, { seed: S(), color: 'red' })
+      place('light_mast', X + 3, Z - 18, 0, { seed: S() })
+      api.sandbagRow(X + 2, Z - 9, 0, 3, S())
+      api.sandbagRow(X - 9, Z + 1, ts, 3, S())
+      api.sandbagRow(X + 18, Z + 4, ts, 2, S())
+      api.rockCluster(X + 24, Z - 14, 3, 1.3, S())
+      api.scrub(X - 24, Z - 16, 1.2, S())
+      api.scrub(X + 22, Z + 20, 1, S())
+    } else if (site.id === 'quarry') {
+      // an open quarry: cut rock faces, spoil heaps, a conveyor, the site office
+      api.rock(X - 22, Z - 3, 4, 6, 9, 0.12, S())
+      api.rock(X - 15, Z - 22, 7, 5, 4, 0.5, S())
+      api.rock(X + 6, Z - 24, 5, 4, 3, 1.2, S())
+      gravel(X + 8, Z + 4, 4, 3)
+      gravel(X - 6, Z + 13, 3.4, 2.4)
+      conveyor(X + 17, 0.8, X + 10, 3.4, Z + 4)
+      api.truck(X - 8, Z + 3, 0.3, { paint: 'paint_yellow' })
+      api.truck(X + 3, Z + 21, 1.4, { burnt: true })
+      hut(X + 15, Z - 15, 5, 4, 2.5, 0, 'n')
+      place('cable_reel', X + 12, Z - 9.5, 0.3, { seed: S() })
+      place('pipe_stack', X - 6, Z - 8, 0.3, { seed: S() })
+      place('generator', X + 1, Z - 5.5, 0.2, { seed: S() })
+      place('tire_stack', X - 11, Z - 5, 0, { seed: S() })
+      place('light_mast', X - 18, Z + 14, 0, { seed: S() })
+      place('light_mast', X + 20, Z + 10, 0, { seed: S() })
+      place('jersey_barrier', X + 21, Z - 3, ts, { seed: S() })
+      place('jersey_barrier', X + 21, Z - 8, ts, { seed: S() })
+      api.sandbagRow(X + 6, Z - 15, 0, 3, S())
+      api.rockCluster(X + 3, Z - 20, 3, 1.6, S())
+      api.rockCluster(X - 24, Z + 12, 4, 1.8, S())
+      api.scrub(X + 24, Z + 18, 1.2, S())
+    } else if (site.id === 'bunker') {
+      // a fortified line: a command bunker, two pillboxes, dragon's teeth to the south
+      bunker(X, Z + 6, 9, 6, 2.6)
+      pillbox(X - 17, Z - 17)
+      pillbox(X + 17, Z - 17)
+      for (var tx = -15; tx <= 15; tx += 3) if (Math.abs(tx) > 3) tooth(X + tx, Z - 21.5 + (Math.abs(tx) % 2) * 0.8)
+      api.mast(X + 10, Z + 15, 18)
+      flag(X + 6, Z + 11, M('paint_red'))
+      api.truck(X - 11, Z + 16, 0.2, { canopy: true, paint: 'paint_grey' })
+      api.sandbagRow(X - 8, Z - 11, 0, 3, S())
+      api.sandbagRow(X + 8, Z - 11, 0, 3, S())
+      api.sandbagRow(X - 20, Z, ts, 4, S())
+      api.sandbagRow(X + 20, Z, ts, 4, S())
+      place('generator', X + 7, Z + 4.5, ts, { seed: S() })
+      place('crate_stack', X - 7, Z + 4, 0.2, { seed: S() })
+      place('barrel', X + 8.6, Z + 8.4, 0, { seed: S(), color: 'red' })
+      place('barrel', X + 9.3, Z + 7.8, 0.4, { seed: S() })
+      place('light_mast', X - 18, Z - 9, 0, { seed: S() })
+      place('floodlight_stand', X + 10, Z - 14, 2.6, { seed: S() })
+      place('jersey_barrier', X - 4, Z - 20, 0.04, { seed: S() })
+      place('jersey_barrier', X + 4, Z - 20, -0.05, { seed: S() })
+      api.rockCluster(X - 26, Z + 16, 3, 1.4, S())
+      api.rockCluster(X + 27, Z - 10, 4, 1.6, S())
+    } else if (site.id === 'oasis') {
+      // a far camp at a palm oasis: tents, a pond, a water tank, our flag
+      pond(X + 1, Z - 11, 3.6, S())
+      palm(X - 3.6, Z - 13.4, 7.5, 1.4, S())
+      palm(X + 5.4, Z - 14.4, 8.5, 1.8, S())
+      palm(X + 6, Z - 8.6, 6.5, 1.2, S())
+      palm(X - 3, Z - 7.2, 7, 1.0, S())
+      tent(X - 10, Z + 6, 0.1, 6, 4, 2.6)
+      tent(X - 11, Z - 4, -0.15, 5, 3.6, 2.4)
+      tent(X + 1, Z + 15, ts, 5, 3.6, 2.4)
+      p = P(-8, 15); api.fuelTank(p[0], p[1], true, 5, 1.0, 'paint_white', 'WATER')
+      flag(X - 4, Z + 2, blue)
+      place('generator', X + 7, Z + 13, 0.3, { seed: S() })
+      place('crate_stack', X - 6, Z + 11.5, 0.2, { seed: S() })
+      place('jerry_can', X + 5.5, Z + 8.5, 0.3, { seed: S() })
+      place('jerry_can', X + 6, Z + 9.2, 1.1, { seed: S() })
+      place('barrel', X + 8, Z + 2, 0, { seed: S(), color: 'blue' })
+      place('pallet_stack', X - 14, Z + 13, 0.2, { seed: S() })
+      place('light_mast', X + 16, Z + 15, 0, { seed: S() })
+      place('light_mast', X - 16, Z - 12, 0, { seed: S() })
+      api.sandbagRow(X + 18, Z + 3, ts, 3, S())
+      api.sandbagRow(X - 18, Z + 3, ts, 3, S())
+      api.sandbagRow(X, Z + 20, 0, 4, S())
+      api.sandbagRow(X - 6, Z - 20, 0, 3, S())
+      api.scrub(X - 1, Z - 15.6, 1.2, S())
+      api.scrub(X + 4.6, Z - 6.4, 1, S())
+      api.scrub(X - 5, Z - 10, 0.9, S())
+      api.rockCluster(X + 24, Z - 12, 3, 1.4, S())
+      api.rockCluster(X - 23, Z + 18, 3, 1.3, S())
+    }
+    SXO_GROUPS[SXO_GROUPS.length - 1].nodes = t.staticRoot.children.slice(n0)
+  })
+}
+
+// Each site's meshes get their own merged group instead of joining the
+// map-wide 'level-merged' one (whose bounds span the whole desert, so it is
+// drawn — and shadow-cast — every frame from anywhere). Per site, frustum
+// culling works and a site past SXO_DRAW m from the camera is not drawn at
+// all (the haze has swallowed it by then; the marker still shows). Called by
+// SXD_level after the label atlas, before the big merge.
+var SXO_GROUPS = []
+var SXO_DRAW = 1000
+function SXO_split(t, root) {
+  var groups = SXO_GROUPS
+  SXO_GROUPS = []
+  var parts = []
+  groups.forEach(function (gr) {
+    if (!gr.nodes || !gr.nodes.length) return
+    var g = new lt.Group()
+    gr.nodes.forEach(function (n) { if (n.parent === t.staticRoot) g.attach(n) })
+    var m = By(g)
+    m.name = 'outpost-' + gr.site.id
+    root.add(m)
+    parts.push({ obj: m, x: gr.site.x, z: gr.site.z, r: gr.site.r })
+  })
+  var cam = t.G.camera
+  t.updaters.push(function () {
+    var e = cam.matrixWorld.elements, cx = e[12], cz = e[14]
+    for (var k = 0; k < parts.length; k++) {
+      var q = parts[k], on = Math.hypot(cx - q.x, cz - q.z) - q.r < SXO_DRAW
+      if (q.obj.visible !== on) q.obj.visible = on
     }
   })
+  return parts
 }
 
 // ----------------------------------------------------- shared unit helpers
@@ -571,7 +1012,7 @@ SXU_PLUGINS.push(function SXO_plugin(U, G) {
     if (!P) return
     if (introT > 0) {
       introT -= dt
-      if (introT <= 0) U.radio('Control: Camp Mirage holds the west dunes. Machines hold Ridge Post, Radar Station and the Fuel Depot — take them if you can.', 6)
+      if (introT <= 0) U.radio('Control: Camp Mirage holds the west dunes, Camp Oasis the far south-west. Machines hold Ridge Post, Radar Station, the Fuel Depot and six posts out in the deep desert — take them if you can.', 7)
     }
     if (!ui) buildUi()
     var cam = G.camera, W = innerWidth, H = innerHeight
@@ -591,11 +1032,13 @@ SXU_PLUGINS.push(function SXO_plugin(U, G) {
       }
       if (site.def.side === 'ally' && !site.told && d < 70) {
         site.told = true
-        U.radio('Mirage: Breacher, welcome to Camp Mirage. Take what you need — the Rhino is fuelled.', 5)
+        if (s.hello) U.radio(s.hello, 5)
       }
-      // marker
+      // marker (the whole map is 1.5 km: every site shows; far ones dimmed)
       if (!site.el) return
-      var show = d > 28 && d < 900
+      var show = d > 28 && d < 2200
+      var far = d > 650
+      if (site.el._f !== far) { site.el._f = far; site.el.classList.toggle('far', far) }
       if (show) {
         proj.set(s.x, 14, s.z).project(cam)
         show = proj.z < 1 && Math.abs(proj.x) < 1.02 && Math.abs(proj.y) < 1.02
