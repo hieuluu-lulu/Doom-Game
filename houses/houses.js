@@ -684,7 +684,9 @@ function SXH_layout(api) {
   // a town: a paved main street and a cross street, buildings fronting them
   // (taller in the middle), parked cars, a power line, trees round about
   function planTown(s, r) {
+    // the main street runs along the axis the dirt track comes in on (desert/lib/40_tracks.js)
     var R = s.r - 7, turn = (r() * 2) | 0, xc = (r() - 0.5) * 20, MH = 4.5, CH = 3.5, SET = 2.5
+    if (s.trackDir) turn = Math.abs(s.trackDir[0]) >= Math.abs(s.trackDir[1]) ? 0 : 1
     var toW = function (x, z) { return turn ? [s.x - z, s.z + x] : [s.x + x, s.z + z] }
     var fW = function (f) { return turn ? { s: 'w', n: 'e', e: 's', w: 'n' }[f] : f }
     var inPad = function (x0, z0, x1, z1) { return [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].every(function (p) { return Math.hypot(p[0], p[1]) < R }) }
@@ -720,7 +722,10 @@ function SXH_layout(api) {
       return unit({ cx: p[0], cz: p[1], W: L.W, D: L.D, front: fr, kind: 'block', F: F, tint: pick(r, SXH_TINTS), shop: r() < 0.45,
         tanks: F >= 2 && r() < 0.65 ? 1 + (r() < 0.45 ? 1 : 0) : 0, escape: F >= 3 && r() < 0.55 })
     })
-    return { units: units, extra: function (free) {
+    // patrol routes: the main street end to end, the cross street
+    var zc0 = Math.sqrt(Math.max(0, R * R - xc * xc)) - 4
+    var routes = [[-R + 2, -R / 2, 0, R / 2, R - 2].map(function (x) { return toW(x, 0) }), [-zc0, -zc0 / 2, 0, zc0 / 2, zc0].map(function (z) { return toW(xc, z) })]
+    return { units: units, routes: routes, extra: function (free) {
       // the streets (asphalt, worn), clipped to the pad
       var slabL = function (mat, x0, z0, x1, z1, y, col) {
         var a = toW(x0, z0), b = toW(x1, z1)
@@ -756,9 +761,14 @@ function SXH_layout(api) {
   // two wings with gable roofs round a courtyard and its fountain; a barn, a
   // shed, a water tower, fields and a corral outside the walls
   function planRanch(s, r) {
+    // a quarter turn 0-3: the gate (local +z) faces the dirt track when there is one
     var turn = (r() * 2) | 0
-    var toW = function (x, z) { return turn ? [s.x - z, s.z + x] : [s.x + x, s.z + z] }
-    var fW = function (f) { return turn ? { s: 'w', n: 'e', e: 's', w: 'n' }[f] : f }
+    if (s.trackDir) { var td = s.trackDir; turn = td[1] > 0.5 ? 0 : td[0] < -0.5 ? 1 : td[1] < -0.5 ? 2 : 3 }
+    var rot = function (x, z) { return turn === 0 ? [x, z] : turn === 1 ? [-z, x] : turn === 2 ? [-x, -z] : [z, -x] }
+    var toW = function (x, z) { var q = rot(x, z); return [s.x + q[0], s.z + q[1]] }
+    var DIR = { s: [0, 1], n: [0, -1], e: [1, 0], w: [-1, 0] }
+    var fW = function (f) { var q = rot(DIR[f][0], DIR[f][1]); return q[1] > 0.5 ? 's' : q[1] < -0.5 ? 'n' : q[0] > 0.5 ? 'e' : 'w' }
+    var face = function (f) { return { s: 'z+', n: 'z-', e: 'x+', w: 'x-' }[fW(f)] }
     var white = 0xe9e2d2, U = function (lx, lz, o) { var p = toW(lx, lz); o.cx = p[0]; o.cz = p[1]; o.front = fW(o.front); o.kind = 'block'; return unit(o) }
     var units = [
       U(0, -9, { W: 20, D: 10, front: 's', F: 2, tint: white, roof: 'hip', porch: true, doorW: 1.8 }),
@@ -767,7 +777,9 @@ function SXH_layout(api) {
       U(36, -6, { W: 14, D: 10, front: 'w', F: 1, sh: 4.4, tint: 0xa9825f, roof: 'gable', doorW: 3.6 }),
       U(-36, 27, { W: 8, D: 6, front: 'e', F: 1, tint: 0xcdb08a, roof: 'gable', back: false }),
     ]
-    return { units: units, extra: function (free) {
+    // a patrol round the courtyard
+    var routes = [[[-8.5, 5], [8.5, 5], [8.5, 14], [-8.5, 14], [-8.5, 5]].map(function (p) { return toW(p[0], p[1]) })]
+    return { units: units, routes: routes, extra: function (free) {
       var wm = plaster(0xe3d6bd), wTrim = plaster(0xd3c3a4)
       var slabL = function (mat, x0, y0, z0, x1, y1, z1, col) {
         var a = toW(x0, z0), b = toW(x1, z1)
@@ -813,8 +825,8 @@ function SXH_layout(api) {
       slabL(wood, -1.9, 2.35, 19.32, 1.9, 2.92, 19.42)
       ;[-1.6, 1.6].forEach(function (cx2) { slabL(steel, cx2 - 0.02, 2.92, 19.35, cx2 + 0.02, 3.0, 19.39) })
       var sc = toW(0, 19.47)
-      t.label('OLD RANCH', 0.42, sc[0], 2.64, sc[1], turn ? 'x-' : 'z+', { color: 'white', font: 'stencil', distress: 0.35 })
-      var leafA = 1.25, dTurn = turn ? -Math.PI / 2 : 0
+      t.label('OLD RANCH', 0.42, sc[0], 2.64, sc[1], face('s'), { color: 'white', font: 'stencil', distress: 0.35 })
+      var leafA = 1.25, dTurn = (-turn * Math.PI) / 2
       ;[[2.55, -1], [-2.55, 1]].forEach(function (h) {
         var dx = h[1] < 0 ? -Math.cos(leafA) : Math.cos(leafA), dz = -Math.sin(leafA), c = toW(h[0] + dx * 1.27, 19 + dz * 1.27)
         var yawL = (h[1] < 0 ? Math.PI - leafA : leafA) + dTurn
@@ -882,10 +894,11 @@ function SXH_layout(api) {
       field(3.5, 23, 22, 42, 'wheat', 3)
       field(-44, -2, -30, 19, 'crop', 1)
       fence(30, 5, 43, 16, 3)
-      ;[[29, -15], [31, -15.5], [30, -17]].forEach(function (p) { var q = toW(p[0], p[1]); t.cyl(strawM, 0.7, 1.2, q[0], 0.7, q[1], { axis: turn ? 'x' : 'z', seg: 14 }); t.col(q[0] - 0.7, 0, q[1] - 0.7, q[0] + 0.7, 1.4, q[1] + 0.7, 'wood') })
-      var tc = toW(27.5, 4); api.truck(tc[0], tc[1], (turn ? 0 : Math.PI / 2) + 0.2, { paint: 'paint_white' })
+      ;[[29, -15], [31, -15.5], [30, -17]].forEach(function (p) { var q = toW(p[0], p[1]); t.cyl(strawM, 0.7, 1.2, q[0], 0.7, q[1], { axis: turn % 2 ? 'x' : 'z', seg: 14 }); t.col(q[0] - 0.7, 0, q[1] - 0.7, q[0] + 0.7, 1.4, q[1] + 0.7, 'wood') })
+      var tc = toW(27.5, 4); api.truck(tc[0], tc[1], Math.PI / 2 + dTurn + 0.2, { paint: 'paint_white' })
       scatter(s, r, function (x, z, m) {
-        var l = turn ? [z - s.z, -(x - s.x)] : [x - s.x, z - s.z]
+        // world → local: the inverse quarter turn
+        var wx = x - s.x, wz = z - s.z, l = turn === 0 ? [wx, wz] : turn === 1 ? [wz, -wx] : turn === 2 ? [-wx, -wz] : [-wz, wx]
         return free(x, z, m) && !(Math.abs(l[0]) < 26 && Math.abs(l[1]) < 21) && !(l[1] > 21 && Math.abs(l[0]) < 24) && !(l[0] < -28 && l[1] > -4 && l[1] < 21)
       }, ['barrel', 'pallet_stack', 'jerry_can'], 8)
     } }
@@ -932,7 +945,8 @@ function SXH_layout(api) {
     mi.visible = false
     t.dynRoot.add(mi); t.dynRoot.add(mf)
     SXH_ST.built.push({ site: s, y: Y, units: plan.units, shell: boxes.filter(function (b) { return !b.sxhIn }), ins: boxes.filter(function (b) { return b.sxhIn }),
-      on: false, onIn: false, holder: null, inner: mi, far: mf, near: false, posts: ctx.posts, doors: ctx.doors, gar: [], garOn: false, cleared: false })
+      on: false, onIn: false, holder: null, inner: mi, far: mf, near: false, posts: ctx.posts, doors: ctx.doors, gar: [], garOn: false, cleared: false,
+      routes: (plan.routes || []).map(function (rt) { return rt.map(function (p) { return [p[0], Y, p[1]] }) }) })
   })
 
   // colliders in and out of the physics with the players' distance; the
@@ -1073,17 +1087,36 @@ function SXH_models(t) {
 // The towns, the ranch and the small groups are held: when a player comes
 // within SXH_ACTIVE_IN m, troopers take posts behind the windows (upper floors
 // first) and on the roofs (troopers/troopers.js spawnPost: they fight from
-// there and never leave). All down: the place is clear (radio). Everybody
-// gone past SXH_ACTIVE + 100 m: the rest stand down, and the place is held
-// again on the next visit. Online only the host spawns (guests get twins).
+// there and never leave), and a patrol walks each street (spawnRoute). One of
+// them sees you: all of them know where you are. A long fight brings a squad
+// in from the far street end (towns twice, the others once). All down: the
+// place is clear (radio). Everybody gone past SXH_ACTIVE + 100 m: the rest
+// stand down, and the place is held again on the next visit. A car or two is
+// parked where the dirt track comes in. Online only the host spawns (guests
+// get twins).
 var SXH_GARRISON = { town: 7, ranch: 5, group: 3 } // troopers per place (groups of 2+ houses only)
 var SXH_VARIANTS = [['rifle', 0.6], ['marksman', 0.25], ['heavy', 0.15]]
 if (typeof SXU_PLUGINS !== 'undefined') SXU_PLUGINS.push(function SXH_garrisons(U, G) {
   if (!U.desert) return
   var V3 = lt.Vector3
-  U.hooks.reset.push(function () { (SXH_ST.built || []).forEach(function (b) { b.gar = []; b.garOn = false; b.cleared = false }) })
+  U.hooks.reset.push(function () {
+    ;(SXH_ST.built || []).forEach(function (b) {
+      b.gar = []; b.garOn = false; b.cleared = false; b.waves = 0; b.alertT = 0
+      // a car or two parked where the dirt track comes in (desert/lib/40_tracks.js)
+      var s = b.site, td = s.trackDir
+      if (!td || (s.kind !== 'town' && s.kind !== 'ranch')) return
+      var px = -td[1], pz = td[0], yaw = Math.atan2(-td[0], -td[1])
+      var at = function (along, side) { return [s.x + td[0] * along + px * side, s.z + td[1] * along + pz * side] }
+      var cars = s.kind === 'town' ? [['sandcat', s.r - 14, 2.4], ['rhino', s.r - 24, -2.4]] : [['sandcat', s.r - 5, 4]]
+      cars.forEach(function (c) {
+        if (!SXU_TYPES[c[0]]) return
+        var q = at(c[1], c[2])
+        U.spawn(c[0], { pos: U.spotOutside(q[0], q[1], c[0] === 'rhino' ? 3.6 : 2.6), yaw: yaw })
+      })
+    })
+  })
   var pickVariant = function () { var x = Math.random(); for (var i = 0; i < SXH_VARIANTS.length; i++) { x -= SXH_VARIANTS[i][1]; if (x <= 0) return SXH_VARIANTS[i][0] } return 'rifle' }
-  U.hooks.update.push(function () {
+  U.hooks.update.push(function (dt) {
     if (!G.game || G.game.state !== 'playing' || !U.troopers || !U.troopers.spawnPost) return
     if (typeof SXN !== 'undefined' && SXN.active && SXN.role === 'guest') return
     var P = G.player
@@ -1103,10 +1136,30 @@ if (typeof SXU_PLUGINS !== 'undefined') SXU_PLUGINS.push(function SXH_garrisons(
           var u = U.troopers.spawnPost(new V3(q.x, q.y, q.z), q.yaw, pickVariant())
           if (u) b.gar.push(u)
         }
-        b.garOn = b.gar.length > 0
+        // and on the streets: a patrol per route
+        ;(b.routes || []).forEach(function (rt) { var u = U.troopers.spawnRoute && U.troopers.spawnRoute(rt.map(function (p) { return new V3(p[0], p[1], p[2]) }), pickVariant()); if (u) b.gar.push(u) })
+        b.garOn = b.gar.length > 0; b.n0 = b.gar.length; b.waves = 0
         if (b.garOn && s.name) U.radio('Control: contact — ' + s.name + ' is held. Watch the windows and the roofs.', 5)
       } else if (b.garOn) {
         var left = b.gar.filter(function (u) { return u.alive })
+        // one of them sees you: they all know (every 1.5 s)
+        b.alertT = (b.alertT || 0) - (dt || 0.016)
+        if (b.alertT <= 0) {
+          b.alertT = 1.5
+          var seer = left.find(function (u) { return u.debug && u.debug.sees && u.debug.lastKnown })
+          if (seer) left.forEach(function (u) { if (u !== seer) u.alert(seer.debug.lastKnown) })
+        }
+        // a long fight brings more of them in, from the street end furthest from you
+        var down = b.n0 - left.length, want = s.kind === 'town' ? (down >= 7 ? 2 : down >= 3 ? 1 : 0) : down >= 3 ? 1 : 0
+        if (left.length && want > b.waves && d < 200 && U.troopers.spawnSquad) {
+          b.waves++
+          var td2 = s.trackDir || [1, 0], e1 = [s.x + td2[0] * (s.r - 6), s.z + td2[1] * (s.r - 6)], e2 = [s.x - td2[0] * (s.r - 6), s.z - td2[1] * (s.r - 6)]
+          var far = Math.hypot(P.pos.x - e1[0], P.pos.z - e1[1]) > Math.hypot(P.pos.x - e2[0], P.pos.z - e2[1]) ? e1 : e2
+          var rf = U.troopers.spawnSquad(3, new V3(far[0], b.y, far[1]), {}) || []
+          rf.forEach(function (u) { b.gar.push(u) })
+          b.n0 += rf.length
+          if (rf.length && s.name) U.radio('Control: more machines moving into ' + s.name + '.', 4)
+        }
         if (!left.length) {
           b.garOn = false; b.cleared = true
           if (s.name) {

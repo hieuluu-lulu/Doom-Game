@@ -803,6 +803,13 @@ async function SXD_level(i) {
       console.error('[desert] houses layout failed', e)
     }
   }
+  // --- the dirt tracks' ribbons (lib/40_tracks.js), built near the camera ---
+  try {
+    SXD_trackBuild(root, t.updaters, i.camera)
+  } catch (e) {
+    console.error('[desert] tracks failed', e)
+  }
+
 
   var lampMesh = lamps.build()
   if (lampMesh) {
@@ -1733,7 +1740,8 @@ function SXD_roadNearBox(x, z, h) {
 // Ground height: the dunes/berms/mesas (SXD_terrainBase) with the highway's bed
 // levelled into them.
 function SXD_terrainHeight(x, z) {
-  var h = SXD_terrainBase(x, z)
+  // the dirt tracks' beds (lib/40_tracks.js), then the highway's
+  var h = SXD_trackLevel(x, z, SXD_terrainBase(x, z))
   if (!SXD_roadAt(x, z)) return h
   var T = SXD_ROAD_TUNE, ad = Math.abs(SXD_RQ.d), y = SXD_RQ.y
   if (ad <= T.flat) return y

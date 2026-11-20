@@ -524,6 +524,30 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Vị trí kiểm bằng script: chân núi (bán kính ×1,3 + 148 m) không chạm cứ điểm, nền nhà, đường cao tốc hay núi khác.
   - Bake lưới độ cao: các vòng lặp mesa và nền nhà loại nhanh bằng hộp bao trước khi tính khoảng cách.
 - **Dãy núi chân trời** (`SXD_PEAKS`, `SXD_peakH`): 17 đỉnh (bán kính 420–600 m, cao 150–270 m, có 2 đèo) ở 1,8–2,2 km quanh map. Chúng chỉ mọc từ `SXD_PLAY_R - 50` trở ra (`SXD_terrainBase` nhân với hệ số tăng dần tới +150 m), nên phần chơi được không đổi; đứng ở vùng ngoài sẽ thấy núi khép kín chân trời.
+- **Đường đất** (`desert/lib/40_tracks.js`, chỉnh ở `SXD_TRACK_TUNE`): 13 tuyến, tổng khoảng 5,2 km, nối các nơi xa ra đường cao tốc.
+  - **Nối những nơi nào** (`SXD_TRACK_FROM`, theo thứ tự dựng): Dustwater, Old Ranch, Copper Flats, Camp Oasis, Bunker Line, Salt Pan Relay, Scrapyard, Sunken Wells, West Quarry và 4 cụm nhà. Mỗi tuyến đi tới chỗ gần nhất của mạng đường: đường cao tốc, hoặc một tuyến đã dựng trước nó (nên có chỗ rẽ nhánh). Checkpoint Nine nằm sát đường cao tốc nên không cần; nhà lẻ không có.
+  - **Tìm tuyến:** chỉ chạy một lần lúc tải map, mất khoảng 44 ms.
+    - Lưới ô 20 m. Ô bị chặn: mép map, khu căn cứ, núi mesa (bán kính ×1,3 + 40 m), con dốc lên núi (22 m quanh trục dốc), các nơi khác (nền nhà, lòng chảo cứ điểm).
+    - Sườn đá vụn quanh núi tốn gấp 2,5 lần.
+    - Tìm bằng A*, ước lượng bằng khoảng cách chamfer tới mạng đường. Bản đầu dùng Dijkstra mất 4,8 s và không tìm được đường cho Sunken Wells.
+    - Sau đó kéo thẳng những đoạn không vướng gì, rồi làm mượt bằng spline Catmull-Rom mỗi 2 m (như đường cao tốc).
+  - **Nền đường** (`SXD_trackLevel`, trong `SXD_terrainHeight` trước đường cao tốc, nên va chạm, hiển thị, minimap và vòng thô khớp nhau):
+    - Mặt đất dưới tuyến được làm mượt (Gauss 18 m), rồi giới hạn dốc 8 %.
+    - Hai đầu ghim vào nền nhà / lòng chảo nơi xuất phát và vào mặt đường cao tốc hoặc tuyến nó nhập vào.
+    - Mặt phẳng rộng 7,2 m. Hai bên vuốt dần về mặt đất trên bề rộng 2 m cộng 2 m cho mỗi mét chênh cao (tối đa khoảng 26 m), nên chỗ đào chỗ đắp đều thoải.
+  - **Thị trấn và trang trại quay theo đường:** `SXD_trackData` ghi lại `site.trackDir` và `site.trackStart`.
+    - Phố chính của thị trấn quay theo trục gần với hướng đường đất nhất, nên đường đi thẳng vào đầu phố.
+    - Trang trại quay theo 1 trong 4 hướng để cổng trước nhìn ra đường đất.
+  - **Mặt đường** (`SXD_trackBuild`): dải đất nén rộng 6 m, mép sáng, hai vệt bánh xe sẫm, nhiễu theo toạ độ thế giới.
+    - Màu chuyển sang tuyến tính (mũ 2,2). Lúc đầu dùng thẳng màu sRGB nên đường gần như trắng.
+    - Mặt đường nằm cao hơn đất 0,11 m (mép 0,06 m) và có polygonOffset. Thấp hơn thì đất xuyên lên thành răng cưa.
+    - Dựng dần từng đoạn 80 m (tối đa 2 đoạn mỗi khung hình) trong 600 m quanh camera, hiện trong 540 m.
+    - Dừng trước mép nhựa của đường cao tốc và trước tuyến nó nhập vào, nên không chồng lên nhau.
+  - Tạo lưới độ cao lúc tải map giờ khoảng 0,83 s (trước 0,62 s).
+  - **Đã thử:**
+    - Cả 13 tuyến đều tìm được, dốc lớn nhất đúng 8 %.
+    - Lái tự động bám tuyến: Sandcat trên tuyến Copper Flats chạy 508 m trong 19,9 s, lệch tâm tối đa 1,1 m; Rhino trên tuyến Sunken Wells chạy 906 m trong 55,2 s, lệch tối đa 1,3 m.
+    - Ảnh chụp: tuyến Dustwater đi thẳng vào đầu phố chính, tuyến Old Ranch đi thẳng tới cổng.
 
 ## units (khung cho robot to và xe lái được)
 
@@ -540,6 +564,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Khi chết hiện trong bảng kill.
 - **Map sa mạc:**
   - Xe đồng minh đỗ ngoài cổng tây.
+  - Ở đầu đường đất của mỗi thị trấn có một Sandcat và một Rhino đỗ; trang trại có một Sandcat ngoài cổng (`houses/houses.js`, xem "Lính giữ thị trấn").
   - Robot khổng lồ, gunship và máy bay địch xuất hiện theo số lính robot bị hạ, không theo relay nữa (xem "Boss xuất hiện dần" ở trên).
 
 ## outposts (cứ điểm trên map sa mạc)
@@ -589,8 +614,9 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - Bụi cây thấp xanh xám có vài cành khô, rải ở thị trấn, cụm nhà và trang trại (khoảng 1,6 bụi cho mỗi cây).
 - **Chi tiết nhỏ chỉ vẽ khi ở gần:** song kính, nan cửa chớp, lưới máy lạnh và chấn song ban công nằm trong nhóm vẽ trong 220 m (cùng nhóm với nội thất). Nhìn thị trấn Copper Flats từ khoảng 850 m giảm từ 151 nghìn xuống 105 nghìn tam giác.
 - **Các nơi:**
-  - **Dustwater** (230 / -640, bán kính 80 m) và **Copper Flats** (380 / 760, 75 m): một phố chính trải nhựa có vỉa hè và một phố cắt ngang; 17–18 nhà quay mặt ra phố, nhà cao (3–5 tầng, căn hộ gạch) ở giữa, nhà thấp ra rìa; cột điện và dây dọc phố, xe đỗ, thùng rác, thùng phuy, cây Joshua và cây cọ.
+  - **Dustwater** (230 / -640, bán kính 80 m) và **Copper Flats** (380 / 760, 75 m): một phố chính trải nhựa có vỉa hè và một phố cắt ngang; 17–18 nhà quay mặt ra phố, nhà cao (3–5 tầng, căn hộ gạch) ở giữa, nhà thấp ra rìa; cột điện và dây dọc phố, xe đỗ, thùng rác, thùng phuy, cây Joshua và cây cọ. Phố chính chạy theo trục (đông–tây hoặc bắc–nam) gần với hướng đường đất nhất.
   - **Old Ranch** (-380 / 1060, 52 m): tường bao 2,6 m có mái ngói, cổng trước có trụ và dầm, cổng sau, cổng hông ra nhà kho; nhà chính 2 tầng mái ngói bốn phía có hiên cột, hai dãy nhà ngang mái hai phía quanh sân trong có đài phun nước, cây cọ, bồn cây; bên ngoài có nhà kho lớn, nhà kho nhỏ, tháp nước, 3 ruộng có hàng rào gỗ, bãi quây, rơm.
+    - Cả trang trại quay theo 1 trong 4 hướng (`planRanch`, `turn` 0–3) để cổng trước nhìn ra đường đất. Mọi thứ trong bố cục (mặt trước của nhà, hướng chữ trên biển, trục hàng rơm, góc đỗ xe tải, vị trí đồ rải) quay theo.
   - 4 cụm 2–3 nhà và 12 nhà lẻ (chọn chỗ bằng cách lấy điểm xa nhất trên vùng đất trống).
   - Tất cả được kiểm bằng script để không chạm núi, cứ điểm, đường cao tốc và nhau. Bố cục là của riêng game này: chỉ lấy ý chung "thị trấn sa mạc nhiều nhà tầng" và "trang trại có tường bao", không chép bố cục của game nào.
 - **Cách dựng** (`SXH_layout`, gọi từ `SXD_level` sau cứ điểm): dựng mọi thứ ở y = 0 bằng các hàm dựng sẵn có (`SXO_kit`, `api.truck`, `place`…), rồi nhấc cả mesh, prop và collider lên độ cao nền. Phần ngoài của mỗi nơi là một nhóm mesh riêng (`SXD_GROUPS`). Phần trong (tường trong, sàn, cầu thang, đồ đạc) gộp thành nhóm khác, chỉ vẽ khi camera trong `SXH_INSIDE` (220 m); xa hơn thì thay bằng một khối tối trong mỗi nhà, để nhìn qua cửa sổ không thấy xuyên.
@@ -603,9 +629,23 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
 - **Lính giữ thị trấn** (plugin `SXH_garrisons` cuối `houses/houses.js`): Dustwater và Copper Flats mỗi nơi 7 lính, Old Ranch 5, mỗi cụm 2–3 nhà 3 lính; nhà lẻ không có.
   - Khi có người chơi tới trong 160 m, lính được đặt ở các vị trí chốt tính sẵn lúc dựng nhà: trên mái cạnh lan can, rồi sau cửa sổ mặt trước ở tầng trên (mặt trước nhìn ra phố), rồi cửa sổ khác; tối đa 2 lính mỗi nhà. 60 % lính súng trường, 25 % bắn tỉa, 15 % lính nặng.
   - Chế độ chốt (`opts.post` trong `troopers/troopers.js`, sinh bằng `U.troopers.spawnPost` để không bị đẩy ra khỏi nhà như `spawnSquad`): đứng yên tại chỗ, quay mặt ra ngoài; nghe súng hoặc thấy địch thì quay về hướng đó trong 8 giây; giao chiến ngay tại chỗ, thỉnh thoảng thụp xuống sau bệ cửa hoặc lan can; không đi lùng hay chạy chỗ khác.
+  - **Tuần tra:** mỗi phố có 1 lính đi tuần (`opts.route`, sinh bằng `U.troopers.spawnRoute`). Thị trấn có 2 tuyến (phố chính và phố cắt ngang), trang trại 1 tuyến quanh sân trong.
+    - Lính đi tới đi lui giữa các điểm của tuyến. Tới điểm khi cách dưới 1,5 m; quá 30 giây chưa tới thì bỏ qua điểm đó.
+    - Thấy hoặc nghe địch thì giao chiến như lính thường (nấp, đánh vòng); mất dấu thì đi lùng rồi quay lại tuyến.
+    - Lính tuần tính thêm vào số lính giữ: Dustwater 9, Old Ranch 6.
+  - **Báo động:** cứ 1,5 giây, nếu một lính đang thấy người chơi thì cả nơi đó biết vị trí người chơi (`u.alert`). Lính chốt chỉ quay về hướng đó; lính tuần thì kéo tới.
+  - **Tiếp viện:** khi đánh lâu, một tổ 3 lính (`spawnSquad`) kéo tới từ đầu phố xa người chơi hơn, radio báo "more machines moving into <tên>".
+    - Thị trấn: lần 1 khi đã hạ 3 lính, lần 2 khi đã hạ 7. Trang trại và cụm nhà: 1 lần khi đã hạ 3.
+    - Chỉ khi người chơi còn trong 200 m và nơi đó còn lính sống. Lính tiếp viện tính vào số phải hạ để giải phóng nơi đó.
+  - **Xe đỗ:** mỗi lần chơi lại, mỗi thị trấn có một Sandcat (cách tâm r − 14 m) và một Rhino (r − 24 m) đỗ hai bên đầu phố chỗ đường đất vào, mũi xe hướng ra đường. Trang trại có một Sandcat ngay ngoài cổng. Vị trí lấy bằng `U.spotOutside` để không đỗ trong nhà.
   - Hạ hết thì radio báo "<tên> is clear", thông báo trên màn hình. Mọi người đi xa hơn 550 m thì số lính còn lại rút đi, lần sau tới lại có lính giữ.
   - Chơi online: chỉ host sinh lính (máy khách thấy bản sao như các robot khác).
   - Test: lính đứng đúng ở độ cao các tầng và mái (6,5 / 9,75 / 16,25 m so với nền), sau 6 giây không xê dịch; người chơi đứng giữa phố bị lính có đường ngắm bắn (11–32 phát trong 9 giây tuỳ vị trí chốt bốc được).
+  - Test ở Dustwater:
+    - Có 9 lính (7 chốt, 2 tuần); 2 lính tuần đi được 12–14 m trong 5 giây.
+    - 3 lính giao chiến, bắn 19 phát.
+    - Hạ 3 lính thì tổ tiếp viện đầu tiên tới (tổng 12 lính, còn sống 9).
+    - Sandcat đỗ cách tâm 66 m, Rhino 56 m.
   - Chơi online: tính theo người chơi gần nhất (`SXN_nearestOps`).
   - Đo: ở điểm xuất phát vẫn là 991 hộp như trước. Đứng giữa Dustwater có 3271 hộp, một tia đạn mất khoảng 18 µs (bình thường khoảng 8 µs).
 - **Bản đồ:** nền nhà và tường rào vẽ lên ảnh nền bản đồ như các công trình khác; tên Dustwater, Copper Flats, Old Ranch hiện trên bản đồ lớn (biểu tượng ngôi nhà).
@@ -648,7 +688,7 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - M hoặc Esc để đóng.
   - Lưới ô vuông đánh chữ A–F và số 1–6, mỗi ô 200 m trên map sa mạc.
 - **Hình nền bản đồ:**
-  - Map sa mạc: vẽ một lần lúc tải map, từ lưới độ cao (đổ bóng đồi) cộng với vị trí các công trình (lấy từ hộp va chạm; nhà thì lấy nền nhà và tường rào từ `houses/`, vì va chạm của nhà chỉ bật khi có người ở gần).
+  - Map sa mạc: vẽ một lần lúc tải map, từ lưới độ cao (đổ bóng đồi) cộng với vị trí các công trình (lấy từ hộp va chạm; nhà thì lấy nền nhà và tường rào từ `houses/`, vì va chạm của nhà chỉ bật khi có người ở gần). Đường đất (`SXD_TRK.tracks`) vẽ thành nét nâu, rộng tối thiểu 2 điểm ảnh.
   - Map cảng: vẽ từ container trên nền nhựa đường và mặt biển.
 
 ## Xe, robot, máy bay (map sa mạc)

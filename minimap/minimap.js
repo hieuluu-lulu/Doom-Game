@@ -109,6 +109,12 @@ function SXM_build(G) {
       line(Math.max(3, 13 / mpp), 'rgba(96,92,86,0.9)')
       line(Math.max(1, 0.8 / mpp), 'rgba(226,186,70,0.85)')
     }
+    // the dirt tracks (desert/lib/40_tracks.js)
+    if (desert && typeof SXD_TRK !== 'undefined' && SXD_TRK && SXD_TRK.tracks) SXD_TRK.tracks.forEach(function (tr) {
+      ctx.strokeStyle = 'rgba(122,98,70,0.85)'; ctx.lineWidth = Math.max(2, 6.5 / mpp); ctx.lineJoin = 'round'; ctx.beginPath()
+      for (var k = 0; k < tr.n; k += 2) { var px3 = (tr.x[k] - W.x0) / mpp, pz3 = (tr.z[k] - W.z0) / mpp; k ? ctx.lineTo(px3, pz3) : ctx.moveTo(px3, pz3) }
+      ctx.stroke()
+    })
     // collider footprints = buildings, containers, walls, rocks
     var boxes = (G.physics && G.physics.boxes || []).slice()
     // the houses' colliders only join the physics near a player (houses/houses.js):

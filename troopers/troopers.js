@@ -272,6 +272,8 @@ SXU_TYPES.trooper = function (G, U, opts) {
     // a post (houses/houses.js garrisons): stand there — behind a window, on a
     // roof — facing postYaw; fight from it, never leave it
     post: opts.post ? opts.post.clone() : null, postYaw: opts.postYaw || 0,
+    // a patrol route (town streets): walk it point to point, back and forth
+    route: opts.route || null, ri: 0, rdir: 1,
     feet: [
       { s: -1, plant: new V3(), from: new V3(), to: new V3(), t: 1, lift: 0 },
       { s: 1, plant: new V3(), from: new V3(), to: new V3(), t: 1, lift: 0 },
@@ -473,6 +475,13 @@ SXU_TYPES.trooper = function (G, U, opts) {
       S.goal = S.lastKnown
       if (Math.hypot(S.lastKnown.x - pos.x, S.lastKnown.z - pos.z) < 2 && S.stateT > 1) {
         if (S.stateT > 6) { S.lastKnown = null; setState('patrol') }
+      }
+    } else if (S.state === 'patrol' && S.route) {
+      if (!S.goal || Math.hypot(S.goal.x - pos.x, S.goal.z - pos.z) < 1.5 || S.stateT > 30) {
+        S.stateT = 0
+        if (S.ri + S.rdir < 0 || S.ri + S.rdir >= S.route.length) S.rdir = -S.rdir
+        S.ri += S.rdir
+        S.goal = S.route[S.ri]
       }
     } else if (S.state === 'patrol') {
       if (!S.goal || Math.hypot(S.goal.x - pos.x, S.goal.z - pos.z) < 1 || S.stateT > 12) {
@@ -844,5 +853,12 @@ SXU_PLUGINS.push(function SXT_plugin(U, G) {
       g.forEach(function (u) { site.garrison.push(u) })
     })
   })
-  U.troopers = { spawnSquad: spawnSquad, spawnPost: spawnPost, mission: function () { return mission }, tune: SXT_TUNE }
+  // one trooper walking a route (V3 points) up and down
+  function spawnRoute(pts, variant) {
+    if (botScale() <= 0 || !pts || pts.length < 2) return null
+    var u = U.spawn('trooper', { pos: pts[0].clone(), yaw: Math.atan2(-(pts[1].x - pts[0].x), -(pts[1].z - pts[0].z)), variant: variant || 'rifle', home: pts[0].clone(), guard: true, state: 'patrol', route: pts })
+    if (u) spawned++
+    return u
+  }
+  U.troopers = { spawnSquad: spawnSquad, spawnPost: spawnPost, spawnRoute: spawnRoute, mission: function () { return mission }, tune: SXT_TUNE }
 })
