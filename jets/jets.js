@@ -12,7 +12,7 @@
 // ============================================================================
 
 var SXJ_TUNE = {
-  arena: { x: -4.25, z: -0.85, half: 575, soft: 45 },
+  arena: { x: -4.25, z: -0.85, half: 575, soft: 45 }, // on the desert the whole map instead (SXJ_arena)
   ceiling: 350,
   talon: {
     label: 'Talon', hp: 760, armor: 0.85, gearH: 1.62, radius: 8,
@@ -189,6 +189,23 @@ function SXJ_loop(G, names, opts) {
 
 function SXJ_damp(a, b, k, dt) { return b + (a - b) * Math.exp(-k * dt) }
 function SXJ_clamp(v, a, b) { return v < a ? a : v > b ? b : v }
+// The roamable area. On the desert: the whole map, the circle that holds
+// players on foot and cars (desert.js SXD_PLAY_R round the basin centre, 6 m
+// inside it like cars/cars.js); the old 575 m square left most of it out.
+// Elsewhere: the SXJ_TUNE.arena square.
+function SXJ_arena() {
+  var A = SXJ_TUNE.arena
+  if (typeof SXD_HG !== 'undefined' && SXD_HG && typeof SXD_PLAY_R !== 'undefined') return { x: SXD_HG.cx, z: SXD_HG.cz, r: SXD_PLAY_R - 6, soft: A.soft }
+  return A
+}
+// how far out (x, z) is: the radius on the circle, the larger axis offset on the square
+function SXJ_out(A, x, z) { return A.r ? Math.hypot(x - A.x, z - A.z) : Math.max(Math.abs(x - A.x), Math.abs(z - A.z)) }
+// back inside the edge (horizontally)
+function SXJ_keepIn(A, pos) {
+  if (!A.r) { pos.x = SXJ_clamp(pos.x, A.x - A.half, A.x + A.half); pos.z = SXJ_clamp(pos.z, A.z - A.half, A.z + A.half); return }
+  var ox = pos.x - A.x, oz = pos.z - A.z, o = Math.hypot(ox, oz)
+  if (o > A.r) { pos.x = A.x + (ox / o) * A.r; pos.z = A.z + (oz / o) * A.r }
+}
 
 // Jet turbine loop for the bundle's sound table: roar + hiss + whine, 2 s, seamless.
 function SXJ_turbineGen() {
@@ -1156,11 +1173,16 @@ function SXJ_makeJet(G, U, opts, kind) {
   }
   function edgeSteer(dt) {
     // soft map edge + ceiling: nose gently turned back in
-    var A = SXJ_TUNE.arena, push = 0, dx = 0, dz = 0
+    var A = SXJ_arena(), push = 0, dx = 0, dz = 0
     var ox = pos.x - A.x, oz = pos.z - A.z
-    var lim = A.half - A.soft
-    if (Math.abs(ox) > lim) { push = Math.max(push, (Math.abs(ox) - lim) / A.soft); dx = -Math.sign(ox) }
-    if (Math.abs(oz) > lim) { push = Math.max(push, (Math.abs(oz) - lim) / A.soft); dz = -Math.sign(oz) }
+    var lim = (A.r || A.half) - A.soft
+    if (A.r) {
+      var o = Math.hypot(ox, oz)
+      if (o > lim) { push = (o - lim) / A.soft; dx = -ox / o; dz = -oz / o }
+    } else {
+      if (Math.abs(ox) > lim) { push = Math.max(push, (Math.abs(ox) - lim) / A.soft); dx = -Math.sign(ox) }
+      if (Math.abs(oz) > lim) { push = Math.max(push, (Math.abs(oz) - lim) / A.soft); dz = -Math.sign(oz) }
+    }
     var dy = 0
     if (pos.y > SXJ_TUNE.ceiling - 30) { push = Math.max(push, (pos.y - (SXJ_TUNE.ceiling - 30)) / 30); dy = -0.6 }
     if (push <= 0) return
@@ -1176,8 +1198,7 @@ function SXJ_makeJet(G, U, opts, kind) {
       if (dx || dz) { var wy = Math.atan2(-want.x, -want.z), dy2 = Math.atan2(Math.sin(wy - U.look.yaw), Math.cos(wy - U.look.yaw)); U.look.yaw += dy2 * k }
       if (dy) U.look.pitch += (Math.min(U.look.pitch, -0.15) - U.look.pitch) * k
     }
-    if (Math.abs(ox) > A.half) pos.x = A.x + Math.sign(ox) * A.half
-    if (Math.abs(oz) > A.half) pos.z = A.z + Math.sign(oz) * A.half
+    SXJ_keepIn(A, pos)
     if (pos.y > SXJ_TUNE.ceiling + 20) { pos.y = SXJ_TUNE.ceiling + 20; if (vel.y > 0) vel.y = 0 }
     if (st.piloted && st.warnT <= 0) { st.warnT = 3; var h = U.hud(); h && h.message('Edge of the operating area — turning back', 1.8) }
   }
@@ -1636,7 +1657,7 @@ SXU_TYPES.petrel = function (G, U, opts) {
   var UP = new V3(0, 1, 0)
   var tmp = new V3(), tmp2 = new V3(), tmp3 = new V3(), tgt = new V3()
   var rnd = function (a, b) { return a + (b - a) * Math.random() }
-  var A = SXJ_TUNE.arena
+  var A = SXJ_arena()
   var pos = opts.pos ? opts.pos.clone() : new V3(200, 160, 400)
   var dir0 = new V3(A.x - pos.x, 0, A.z - pos.z).normalize()
   var u = {
@@ -1763,8 +1784,8 @@ SXU_TYPES.petrel = function (G, U, opts) {
       var vd = tmp3.copy(u.vel).normalize()
       var gAhead = Math.max(U.groundAt(pos.x, pos.z, 999), U.groundAt(pos.x + vd.x * 120, pos.z + vd.z * 120, 999), U.groundAt(pos.x + vd.x * 260, pos.z + vd.z * 260, 999))
       // turn back well inside the edge: at this speed a reversal needs ~300 m
-      var lim = A.half - 170
-      if (Math.abs(pos.x - A.x) > lim || Math.abs(pos.z - A.z) > lim) goal.set(A.x, Math.max(goal.y, 140), A.z)
+      var lim = (A.r || A.half) - 170, outR = SXJ_out(A, pos.x, pos.z)
+      if (outR > lim) goal.set(A.x, Math.max(goal.y, 140), A.z)
       if (goal.y < gAhead + 35) goal.y = gAhead + 35
       if (pos.y < gAhead + 30) goal.y = Math.max(goal.y, pos.y + 60)
       if (goal.y > SXJ_TUNE.ceiling - 20) goal.y = SXJ_TUNE.ceiling - 20
@@ -1773,7 +1794,7 @@ SXU_TYPES.petrel = function (G, U, opts) {
       var want = tmp.copy(goal).sub(pos).normalize()
       var ang = Math.acos(SXJ_clamp(curDir.dot(want), -1, 1))
       // steer harder the further past the turn-back line it is
-      var over = Math.max(Math.abs(pos.x - A.x), Math.abs(pos.z - A.z)) - lim
+      var over = outR - lim
       var turn = u.stunT > 0 ? 0.15 : T.turn * (over > 0 ? 1 + over / 50 : 1)
       var step = Math.min(ang, turn * dt)
       axis.crossVectors(curDir, want)
@@ -1819,8 +1840,7 @@ SXU_TYPES.petrel = function (G, U, opts) {
       // hard floor: never inside a dune or a mesa wall
       var gf = U.groundAt(pos.x, pos.z, 999) + 12
       if (pos.y < gf) { pos.y = gf; if (u.vel.y < 0) u.vel.y = 0 }
-      pos.x = SXJ_clamp(pos.x, A.x - A.half, A.x + A.half)
-      pos.z = SXJ_clamp(pos.z, A.z - A.half, A.z + A.half)
+      SXJ_keepIn(A, pos)
     }
     if (!u.alive && !u.crashed) {
       var gh = U.groundAt(pos.x, pos.z, 999)

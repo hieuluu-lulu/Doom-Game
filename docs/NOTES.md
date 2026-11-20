@@ -820,7 +820,16 @@ Mở `index.html?map=desert`, hoặc chọn map ngay ở menu đầu game. Chi t
   - R: nạp lại tên lửa.
   - Harrow khi treo lơ lửng vẫn lái như trực thăng. Khi mở pod, Harrow tự giữ cánh thăng bằng; đóng pod thì hướng ngắm quay về theo mũi.
 - **Xuống máy bay (F):** chỉ được khi đã đáp và dừng, hoặc khi Harrow treo thấp dưới 3,5 m. Máy bay nổ trên không thì người chơi rơi xuống đất và mất 35 máu.
-- **Giới hạn bay:** trần khoảng 350 m. Cách tâm map khoảng ±575 m thì máy bay tự quay đầu vào.
+- **Giới hạn bay:** trần khoảng 350 m.
+  - **Vùng bay là cả map:** hình tròn bán kính 1494 m quanh tâm map, đúng chỗ xe bị chặn (`SXD_PLAY_R` − 6 m). Áp dụng cho máy bay phản lực (`SXJ_arena` trong `jets/jets.js`) và trực thăng (`SXH_arena` trong `aircraft/aircraft.js`). Trước đây là ô vuông ±575 m từ hồi map còn nhỏ, nên máy bay bị quay đầu khi mới đi chưa tới nửa map.
+  - Cách mép 45 m thì máy bay phản lực tự quay đầu vào, kèm thông báo "Edge of the operating area". Trực thăng thì bị đẩy lùi từ cách mép 30 m.
+  - Máy bay địch cũng bay khắp map. Petrel quay đầu khi cách mép 170 m; Skua chỉ chọn điểm bay trong vòng cách mép 40 m.
+  - Map khác vẫn dùng ô vuông cũ (`arena` trong `SXJ_TUNE` / `SXH_TUNE`).
+  - **Đã thử:**
+    - Talon bay thẳng ra phía đông, tới 1492 m rồi tự quay đầu vào.
+    - Kestrel bị đẩy ra mép thì dừng ở 1488 m.
+    - Petrel đuổi theo người chơi đứng cách tâm 1300 m, bay sát tới 67 m rồi vòng lại.
+    - Bay chéo qua map ở 130 m/s, chất lượng High: trung vị 16,6 ms mỗi khung, 99 % số khung dưới 22,5 ms, khung chậm nhất 41,5 ms.
 - **Cứ điểm địch:** khi đang lái máy bay, cứ điểm tỉnh dậy từ khoảng cách 400 m (đi bộ hoặc đi xe là 150 m), nên bắn được từ xa.
 - **Minimap:** máy bay có icon hình máy bay xoay theo hướng bay. Của mình màu xanh; của địch màu đỏ, hiện khi trong vòng 400 m.
 - **Chỉnh số liệu:** `SXJ_TUNE` ở đầu `jets/jets.js`.

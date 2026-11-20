@@ -25,6 +25,7 @@ var SXH_TUNE = {
     telegraphCannon: 0.6, telegraphMissile: 0.95,
   },
   // the roamable map: a square around the basin centre with a soft edge
+  // (on the desert the whole map instead, SXH_arena)
   arena: { x: -4.25, z: -0.85, half: 575, soft: 30 },
 }
 
@@ -186,10 +187,29 @@ function SXH_blurMat(tint, opacity) {
 
 function SXH_damp(a, b, k, dt) { return b + (a - b) * Math.exp(-k * dt) }
 
-// Soft square map edge: past (half - soft) the velocity is pushed back in,
-// and nothing goes beyond half.
-function SXH_edge(pos, vel, dt) {
+// The roamable area. On the desert: the circle that holds players on foot and
+// cars (desert.js SXD_PLAY_R round the basin centre; cars/cars.js keeps 6 m
+// inside it), so aircraft reach the whole map; the old 575 m square left
+// most of it out. Elsewhere: the SXH_TUNE.arena square.
+function SXH_arena() {
   var A = SXH_TUNE.arena
+  if (typeof SXD_HG !== 'undefined' && SXD_HG && typeof SXD_PLAY_R !== 'undefined') return { x: SXD_HG.cx, z: SXD_HG.cz, r: SXD_PLAY_R - 6, soft: A.soft }
+  return A
+}
+// Soft map edge: past (edge - soft) the velocity is pushed back in, and
+// nothing goes beyond the edge (a circle of radius r, or a square of half size half).
+function SXH_edge(pos, vel, dt) {
+  var A = SXH_arena()
+  if (A.r) {
+    var ox = pos.x - A.x, oz = pos.z - A.z, o = Math.hypot(ox, oz)
+    if (o > A.r - A.soft) {
+      var nx = ox / o, nz = oz / o, over = (o - (A.r - A.soft)) / A.soft, vo = vel.x * nx + vel.z * nz
+      if (vo > 0) { var cut = vo * Math.min(1, over * 6 * dt + over * 0.1); vel.x -= nx * cut; vel.z -= nz * cut }
+      vel.x -= nx * over * 12 * dt; vel.z -= nz * over * 12 * dt
+    }
+    if (o > A.r) { pos.x = A.x + (ox / o) * A.r; pos.z = A.z + (oz / o) * A.r }
+    return
+  }
   var axes = [['x', A.x], ['z', A.z]]
   for (var k = 0; k < 2; k++) {
     var key = axes[k][0], c = axes[k][1], o = pos[key] - c, ao = Math.abs(o), s = Math.sign(o)
@@ -1264,7 +1284,7 @@ SXU_TYPES.skua = function (G, U, opts) {
       m = nm
     }
     var hasT = !!U.target(tgt)
-    var A = SXH_TUNE.arena
+    var A = SXH_arena()
     if (u.alive) {
       u.stunT = Math.max(0, u.stunT - dt)
       if (u.mode === 'guard' && hasT && tgt.distanceTo(u.pos) < 150) { u.mode = 'orbit'; u.guard = false; u.rethinkT = 0 }
@@ -1297,9 +1317,14 @@ SXU_TYPES.skua = function (G, U, opts) {
         var want = tmp2.set(center.x + Math.cos(u.orbitA) * u.orbitR, 0, center.z + Math.sin(u.orbitA) * u.orbitR)
         if (u.mode === 'arrive') want.set(center.x, 0, center.z)
         // keep within the map
-        var lim = A.half - A.soft - 10
-        want.x = Math.max(A.x - lim, Math.min(A.x + lim, want.x))
-        want.z = Math.max(A.z - lim, Math.min(A.z + lim, want.z))
+        var lim = (A.r || A.half) - A.soft - 10
+        if (A.r) {
+          var wx = want.x - A.x, wz = want.z - A.z, wo = Math.hypot(wx, wz)
+          if (wo > lim) { want.x = A.x + (wx / wo) * lim; want.z = A.z + (wz / wo) * lim }
+        } else {
+          want.x = Math.max(A.x - lim, Math.min(A.x + lim, want.x))
+          want.z = Math.max(A.z - lim, Math.min(A.z + lim, want.z))
+        }
         // altitude over the terrain ahead and below
         var gNow = clearance(u.pos.x, u.pos.z), gAhead = clearance(u.pos.x + u.vel.x * 2, u.pos.z + u.vel.z * 2)
         want.y = Math.max(gNow, gAhead, hasT && u.mode !== 'guard' ? tgt.y - 1 : 0) + u.alt
